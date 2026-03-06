@@ -118,8 +118,10 @@ class Query:
     def stale(self, days: int = 30) -> list[NodeView]:
         """Return non-terminal tasks with no activity in `days` days.
 
-        Checks CLOSED timestamp and SCHEDULED date. Tasks without any
-        date reference are considered stale if they exist.
+        A task is stale when ALL of its date signals are older than cutoff.
+        Tasks with no date signals at all are NOT considered stale (they're
+        just undated — use the file's mtime or CREATED property to determine
+        actual age).
         """
         cutoff = date.today() - timedelta(days=days)
         state_config = self._ws.state_config
@@ -130,27 +132,36 @@ class Query:
                 continue
             if state_config.is_terminal(todo):
                 continue
-            # Check if there's recent activity
-            closed = node.closed
-            if closed:
-                closed_date = _to_date(closed)
-                if closed_date and closed_date >= cutoff:
-                    continue
 
-            sched = node.scheduled
-            if sched:
-                sched_date = _to_date(sched)
-                if sched_date and sched_date >= cutoff:
-                    continue
+            # Collect all date signals for this node
+            has_any_date = False
+            is_recent = False
 
-            dl = node.deadline
-            if dl:
-                dl_date = _to_date(dl)
-                if dl_date and dl_date >= cutoff:
-                    continue
+            for date_val in (node.closed, node.scheduled, node.deadline):
+                d = _to_date(date_val)
+                if d is not None:
+                    has_any_date = True
+                    if d >= cutoff:
+                        is_recent = True
+                        break
 
-            # No recent timestamps — consider stale
-            results.append(node)
+            # Check CREATED property as fallback
+            if not has_any_date:
+                created = node.properties.get("CREATED")
+                if created:
+                    has_any_date = True
+                    created_date = _parse_org_date_string(created)
+                    if created_date and created_date >= cutoff:
+                        is_recent = True
+
+            if is_recent:
+                continue
+
+            # Only flag as stale if there IS a date signal that's old.
+            # No dates = undated, not stale.
+            if has_any_date:
+                results.append(node)
+
         return results
 
     def overdue(self) -> list[NodeView]:
@@ -171,6 +182,21 @@ class Query:
         return results
 
 
+def _parse_org_date_string(value: str) -> date | None:
+    """Parse an org-mode timestamp string like [2025-01-01 Wed 10:00] to date."""
+    if not value:
+        return None
+    # Extract YYYY-MM-DD from org timestamps
+    import re
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", value)
+    if m:
+        try:
+            return date.fromisoformat(m.group(1))
+        except ValueError:
+            return None
+    return None
+
+
 def _to_date(value) -> date | None:
     """Convert orgparse date value to date."""
     if value is None:
@@ -179,9 +205,12 @@ def _to_date(value) -> date | None:
         return value.date()
     if isinstance(value, date):
         return value
-    # orgparse OrgDate wrapper
+    # orgparse OrgDate wrapper (scheduled/deadline/closed return OrgDate
+    # even when no date is set — check start for None)
     if hasattr(value, "start"):
         start = value.start
+        if start is None:
+            return None
         if isinstance(start, datetime):
             return start.date()
         if isinstance(start, date):

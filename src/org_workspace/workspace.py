@@ -20,6 +20,76 @@ from org_workspace.identifiers import IdIndex
 from org_workspace.node_view import NodeView
 
 
+def _dumps_subtree(node: OrgNode) -> str:
+    """Serialize a node and all its descendants to org text.
+
+    orgparse's dumps() only serializes a single node. This recursively
+    serializes the entire subtree.
+    """
+    parts = [_orgparse_dumps(node)]
+    for child in node.children:
+        parts.append(_dumps_subtree(child))
+    return "\n".join(parts)
+
+
+def _adjust_levels(text: str, delta: int) -> str:
+    """Adjust heading star levels in org text by delta.
+
+    Positive delta adds stars, negative removes. Ensures minimum 1 star.
+    """
+    if delta == 0:
+        return text
+    lines = text.split("\n")
+    result = []
+    for line in lines:
+        if line.lstrip().startswith("*"):
+            # Count leading stars
+            stripped = line.lstrip()
+            stars = len(stripped) - len(stripped.lstrip("*"))
+            if stars > 0:
+                new_stars = max(1, stars + delta)
+                rest = stripped[stars:]
+                result.append("*" * new_stars + rest)
+                continue
+        result.append(line)
+    return "\n".join(result)
+
+
+def _find_subtree_end(file_text: str, node: OrgNode) -> int:
+    """Find the character offset where a node's subtree ends in file text.
+
+    Walks the tree to find the last descendant, then locates where that
+    node's text ends in the file.
+    """
+    # Find the deepest last descendant
+    last = node
+    while last.children:
+        last = last.children[-1]
+
+    last_text = _orgparse_dumps(last)
+    # The node text must appear in the file. Search from the node's own
+    # position forward to avoid matching earlier identical text.
+    node_text = _orgparse_dumps(node)
+    node_start = file_text.find(node_text)
+    if node_start < 0:
+        return len(file_text)
+
+    if last is node:
+        end = node_start + len(last_text)
+    else:
+        # Search for last descendant's text after the node's start
+        last_pos = file_text.find(last_text, node_start)
+        if last_pos < 0:
+            return len(file_text)
+        end = last_pos + len(last_text)
+
+    # Include trailing newline if present
+    if end < len(file_text) and file_text[end] == "\n":
+        end += 1
+
+    return end
+
+
 class InvalidTransitionError(Exception):
     """Raised when a state transition violates StateConfig rules."""
 
@@ -234,8 +304,8 @@ class OrgWorkspace:
     ) -> NodeView:
         """Create a new node in the specified file.
 
-        Uses text-append-and-reload approach because orgparse's children
-        setter requires same OrgEnv, and loads() creates a separate env.
+        When parent is specified, the node is inserted after the parent's
+        subtree (not appended to EOF). This ensures correct tree placement.
         """
         file = Path(file).resolve()
         if file not in self._files:
@@ -258,7 +328,6 @@ class OrgWorkspace:
             tag_part = f" :{tag_str}:"
         org_lines = [f"{stars}{state_part} {heading}{tag_part}"]
 
-        # Indent: 2 spaces per level (standard)
         indent = "  "
         if props:
             org_lines.append(f"{indent}:PROPERTIES:")
@@ -272,20 +341,22 @@ class OrgWorkspace:
 
         new_text = "\n".join(org_lines) + "\n"
 
-        # Get current content, append new node text, write, reload
         current_content = dumps(self._files[file])
 
-        # Append to file content
-        # When parent is specified, the star level handles nesting correctly
-        # (orgparse determines hierarchy by heading level)
-        combined = current_content + new_text
-        file.write_text(combined)
+        if parent is not None:
+            # Insert after the parent's subtree
+            raw_parent = parent.node
+            insert_pos = _find_subtree_end(current_content, raw_parent)
+            combined = current_content[:insert_pos] + new_text + current_content[insert_pos:]
+        else:
+            # No parent: append to end of file
+            combined = current_content + new_text
 
-        # Reload to get proper OrgNode in the right env
+        file.write_text(combined)
         self._reload_preserving_dirty(file)
         self._mark_dirty(file)
 
-        # Find the new node by ID or by heading match at end
+        # Find the new node by ID or by heading match
         node_id = props.get("ID")
         if node_id:
             result = self.find_by_id(node_id)
@@ -323,8 +394,9 @@ class OrgWorkspace:
     ) -> NodeView:
         """Move a node from its current file to another file.
 
-        Uses text-level operations: serialize subtree, remove from source,
-        append to target, reload both. This avoids OrgEnv mismatch.
+        Serializes the full subtree (node + all descendants), adjusts heading
+        levels if target_parent implies a different depth, removes from source,
+        and inserts at the correct position in the target.
         """
         target_file = Path(target_file).resolve()
         if target_file not in self._files:
@@ -333,11 +405,22 @@ class OrgWorkspace:
         raw_node = node.node
         source_file = node.path
         node_id = raw_node.properties.get("ID")
+        heading = raw_node.heading
 
-        # Serialize the subtree text
-        subtree_text = _orgparse_dumps(raw_node)
+        # Serialize the FULL subtree (node + all children recursively)
+        subtree_text = _dumps_subtree(raw_node)
         if not subtree_text.endswith("\n"):
             subtree_text += "\n"
+
+        # Adjust heading levels if target context differs
+        current_level = raw_node.level
+        if target_parent is not None:
+            desired_level = target_parent.level + 1
+        else:
+            desired_level = current_level  # preserve original level
+        level_delta = desired_level - current_level
+        if level_delta != 0:
+            subtree_text = _adjust_levels(subtree_text, level_delta)
 
         # Remove from source tree
         parent = raw_node.parent
@@ -349,9 +432,15 @@ class OrgWorkspace:
         source_content = dumps(self._files[source_file])
         source_file.write_text(source_content)
 
-        # Append to target file on disk
+        # Insert into target at correct position
         target_content = dumps(self._files[target_file])
-        target_file.write_text(target_content + subtree_text)
+        if target_parent is not None:
+            raw_target_parent = target_parent.node
+            insert_pos = _find_subtree_end(target_content, raw_target_parent)
+            new_target = target_content[:insert_pos] + subtree_text + target_content[insert_pos:]
+        else:
+            new_target = target_content + subtree_text
+        target_file.write_text(new_target)
 
         # Reload both files
         self._reload_preserving_dirty(source_file)
@@ -366,7 +455,6 @@ class OrgWorkspace:
                 return result
 
         # Fallback: last node in target matching heading
-        heading = raw_node.heading
         for n in reversed(list(self.all_nodes())):
             if n.path == target_file and n.heading == heading:
                 return n

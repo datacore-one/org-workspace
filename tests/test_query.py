@@ -145,16 +145,34 @@ class TestOverdue:
 
 
 class TestStale:
-    def test_no_dates_is_stale(self, query):
+    def test_no_dates_not_stale(self, query):
+        """Dateless tasks are undated, not stale (no old date signal)."""
         results = query.stale(days=30)
         ids = {n.id() for n in results}
-        assert "q-006" in ids
+        assert "q-006" not in ids
 
     def test_recent_schedule_not_stale(self, query):
         results = query.stale(days=30)
         ids = {n.id() for n in results}
         # q-001 has today's schedule — not stale
         assert "q-001" not in ids
+
+    def test_brand_new_task_no_dates_not_stale(self, tmp_path):
+        """A task created today with no dates should NOT be flagged stale.
+
+        Reproduces suspected false positive: brand-new inbox items have no
+        scheduled/deadline/closed timestamps, so stale() treats them as stale
+        even though they were just created.
+        """
+        content = "* TODO Brand new task\n"
+        f = tmp_path / "brand_new.org"
+        f.write_text(content)
+        ws = OrgWorkspace(roots=[f])
+        results = Query(ws).stale(days=30)
+        headings = [n.heading for n in results]
+        assert "Brand new task" not in headings, (
+            "Brand-new task with no dates was incorrectly flagged as stale"
+        )
 
 
 class TestByProperty:

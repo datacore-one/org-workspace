@@ -240,6 +240,38 @@ class TestCreateNode:
         # parent NodeView is stale after reload, use saved level
         assert new.level == parent_level + 1
 
+    def test_create_under_parent_lands_under_correct_parent(self, tmp_path):
+        """Bug test: create_node with parent= appends to EOF, so the new node
+        ends up under the LAST level-1 heading instead of the specified parent."""
+        org_content = (
+            "* Section A\n"
+            "** A child 1\n"
+            "** A child 2\n"
+            "* Section B\n"
+            "** B child 1\n"
+        )
+        f = tmp_path / "two_sections.org"
+        f.write_text(org_content)
+        ws = OrgWorkspace(roots=[f])
+
+        # Find Section A as parent
+        section_a = None
+        for n in ws.all_nodes():
+            if n.heading == "Section A":
+                section_a = n
+                break
+        assert section_a is not None, "Section A not found"
+
+        # Create a new child under Section A
+        new_node = ws.create_node(f, "New A child", state="TODO", parent=section_a)
+
+        # The new node should be under Section A, not Section B
+        assert new_node.parent is not None, "New node has no parent"
+        assert new_node.parent.heading == "Section A", (
+            f"Expected parent 'Section A', got '{new_node.parent.heading}'. "
+            f"The node was appended to EOF and landed under the last matching-level heading."
+        )
+
     def test_create_with_tags(self, ws_two_files):
         ws, f1, _ = ws_two_files
         new = ws.create_node(f1, "Tagged task", state="TODO", tags=["urgent", "AI"])

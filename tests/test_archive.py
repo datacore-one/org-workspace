@@ -127,6 +127,60 @@ class TestArchivePlan:
         assert "plan-root" in identifiers
 
 
+class TestArchiveHierarchyPreservation:
+    """DIP-0009: Archive mirrors heading hierarchy — same tier/focus-area structure."""
+
+    def test_archive_preserves_parent_heading_hierarchy(self, tmp_path):
+        """Archived node should land under matching parent headings in archive file.
+
+        Source:  * Personal > ** Health > *** DONE Buy vitamins
+        Expected archive: * Personal > ** Health > *** DONE Buy vitamins
+        Actual (gap): *** DONE Buy vitamins dumped at file root
+        """
+        content = (
+            "* Personal\n"
+            "** Health\n"
+            "*** DONE Buy vitamins\n"
+            "   CLOSED: [2025-01-01 Wed 10:00]\n"
+            "   :PROPERTIES:\n"
+            "   :ID: hier-001\n"
+            "   :END:\n"
+        )
+        f = tmp_path / "next_actions.org"
+        f.write_text(content)
+        ws = OrgWorkspace(roots=[f])
+
+        node = ws.find_by_id("hier-001")
+        archive_node(ws, node)
+
+        archive_path = default_archive_path(f)
+        archive_text = archive_path.read_text()
+
+        # Print actual archive content for diagnosis
+        print("=== ARCHIVE FILE CONTENT ===")
+        print(archive_text)
+        print("=== END ARCHIVE ===")
+
+        # DIP-0009 says archive should mirror heading hierarchy.
+        # The archived node should be nested under * Personal > ** Health,
+        # not dumped at the root level.
+        assert "* Personal" in archive_text, (
+            "Archive should contain '* Personal' parent heading"
+        )
+        assert "** Health" in archive_text, (
+            "Archive should contain '** Health' parent heading"
+        )
+
+        # Verify structural nesting: "* Personal" appears before "** Health"
+        # which appears before "*** DONE Buy vitamins"
+        personal_pos = archive_text.index("* Personal")
+        health_pos = archive_text.index("** Health")
+        task_pos = archive_text.index("*** DONE Buy vitamins")
+        assert personal_pos < health_pos < task_pos, (
+            "Hierarchy should be preserved: Personal > Health > task"
+        )
+
+
 class TestArchiveDone:
     def test_archives_old_done_tasks(self, archive_ws):
         ws, f = archive_ws

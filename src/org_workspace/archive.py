@@ -39,11 +39,12 @@ def archive_node(
     """Archive a single node to the target archive file.
 
     Sets :ARCHIVE_TIME: and :ARCHIVE_REASON: before moving.
+    Mirrors the source heading hierarchy in the archive file (DIP-0009).
     Refuses to archive structural headings (level <= 2).
 
     Returns the node ID or heading for confirmation.
     """
-    # Capture identifier before any reloads make the view stale
+    # Capture metadata before any reloads make the view stale
     identifier = node.id() or node.heading
     level = node.level
     source_path = node.path
@@ -53,13 +54,19 @@ def archive_node(
             f"Cannot archive structural heading (level {level}): {identifier}"
         )
 
+    # Capture ancestor chain for hierarchy mirroring
+    ancestor_headings = _get_ancestor_headings(node)
+
     if target is None:
         target = default_archive_path(source_path)
 
     # Ensure target file exists and is loaded
     _ensure_archive_file(workspace, target)
 
-    # Re-resolve node after potential file load (which bumps generation)
+    # Create/find matching hierarchy in archive file
+    archive_parent = _ensure_archive_hierarchy(workspace, target, ancestor_headings)
+
+    # Re-resolve node after potential file load and hierarchy creation
     node_id = node._node.properties.get("ID")
     if node_id:
         node = workspace.find_by_id(node_id)
@@ -71,8 +78,8 @@ def archive_node(
     workspace.set_property(node, "ARCHIVE_TIME", now.strftime("[%Y-%m-%d %a %H:%M]"))
     workspace.set_property(node, "ARCHIVE_REASON", reason)
 
-    # Refile to archive
-    workspace.refile(node, target)
+    # Refile to archive under matching hierarchy
+    workspace.refile(node, target, target_parent=archive_parent)
 
     return identifier
 
@@ -166,7 +173,74 @@ def archive_done(
     return archived
 
 
-def _ensure_archive_file(workspace: OrgWorkspace, path: Path) -> None:
+def _get_ancestor_headings(node: "NodeView") -> list[str]:
+    """Walk up the tree to collect ancestor headings (excluding root).
+
+    Returns list from top to bottom, e.g. ["Personal", "Health"] for a
+    node at `* Personal / ** Health / *** Buy vitamins`.
+    Only includes structural ancestors (level < node.level).
+    """
+    ancestors = []
+    current = node.parent
+    while current is not None:
+        ancestors.append(current.heading)
+        current = current.parent
+    ancestors.reverse()
+    return ancestors
+
+
+def _ensure_archive_hierarchy(
+    workspace: "OrgWorkspace",
+    archive_path: Path,
+    ancestor_headings: list[str],
+) -> "NodeView | None":
+    """Find or create matching heading hierarchy in the archive file.
+
+    Given ancestors ["Personal", "Health"], ensures the archive file has:
+        * Personal
+        ** Health
+
+    Returns the deepest parent NodeView, or None if no ancestors.
+    """
+    if not ancestor_headings:
+        return None
+
+    archive_path = Path(archive_path).resolve()
+    current_parent = None
+
+    for depth, heading in enumerate(ancestor_headings):
+        target_level = depth + 1
+
+        # Search for existing heading at this level under current_parent
+        found = None
+        for n in workspace.all_nodes():
+            if n.path != archive_path:
+                continue
+            if n.heading == heading and n.level == target_level:
+                # Check parentage matches
+                if current_parent is None and n.parent is None:
+                    found = n
+                    break
+                if current_parent is not None and n.parent is not None:
+                    if n.parent.heading == current_parent.heading:
+                        found = n
+                        break
+
+        if found is not None:
+            current_parent = found
+        else:
+            # Create the structural heading
+            current_parent = workspace.create_node(
+                archive_path,
+                heading,
+                parent=current_parent,
+                level=target_level if current_parent is None else None,
+            )
+
+    return current_parent
+
+
+def _ensure_archive_file(workspace: "OrgWorkspace", path: Path) -> None:
     """Ensure archive file exists and is loaded in workspace."""
     path = Path(path).resolve()
     if path not in workspace.files():
