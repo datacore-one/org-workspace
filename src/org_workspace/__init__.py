@@ -22,7 +22,13 @@ from org_workspace.concurrency import (
     multi_lock,
 )
 from org_workspace.context import build_execution_context, get_context, get_refs
-from org_workspace.identifiers import DuplicateIdError, IdIndex, ensure_id
+from org_workspace.identifiers import (
+    DuplicateIdError,
+    IdIndex,
+    ensure_id,
+    generate_id,
+    heading_hash,
+)
 from org_workspace.log import SessionLog, add_clock_entry, add_logbook_entry, add_state_change_entry
 from org_workspace.node_view import NodeView, StaleNodeError
 from org_workspace.plan import Plan, PlanProgress
@@ -50,6 +56,8 @@ __all__ = [
     "DuplicateIdError",
     "IdIndex",
     "ensure_id",
+    "generate_id",
+    "heading_hash",
     # Workspace
     "OrgWorkspace",
     "InvalidTransitionError",

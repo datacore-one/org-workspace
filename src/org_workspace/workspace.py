@@ -16,7 +16,7 @@ from orgparse.node import OrgNode, OrgRootNode
 
 from org_workspace._compat import dumps
 from org_workspace._types import StateConfig
-from org_workspace.identifiers import IdIndex
+from org_workspace.identifiers import IdIndex, generate_id, heading_hash
 from org_workspace.node_view import NodeView
 
 
@@ -300,16 +300,41 @@ class OrgWorkspace:
         level: int | None = None,
         tags: list[str] | None = None,
         body: str | None = None,
+        dedup: bool = False,
         **props: str,
     ) -> NodeView:
         """Create a new node in the specified file.
 
+        Auto-assigns :ID: (content-addressed) and :CREATED: timestamp.
         When parent is specified, the node is inserted after the parent's
         subtree (not appended to EOF). This ensures correct tree placement.
+
+        If dedup=True and a node with the same heading hash already exists
+        in the workspace, returns the existing node instead of creating.
         """
         file = Path(file).resolve()
         if file not in self._files:
             raise ValueError(f"File not loaded: {file}")
+
+        # Dedup check: find existing node with same heading hash
+        if dedup:
+            target_hash = heading_hash(heading)
+            for n in self.all_nodes():
+                existing_id = n.id()
+                if existing_id and existing_id.endswith(f"-{target_hash}"):
+                    return n
+
+        # Auto-generate ID if not provided
+        now = datetime.now()
+        if "ID" not in props:
+            node_id = generate_id(heading, now)
+            # If collision (same heading + same second), add disambiguator
+            if node_id in self._id_index:
+                import uuid
+                node_id = generate_id(heading, now, disambiguator=uuid.uuid4().hex[:8])
+            props["ID"] = node_id
+        if "CREATED" not in props:
+            props["CREATED"] = now.strftime("[%Y-%m-%d %a %H:%M]")
 
         # Determine level
         if parent is not None:
@@ -356,7 +381,7 @@ class OrgWorkspace:
         self._reload_preserving_dirty(file)
         self._mark_dirty(file)
 
-        # Find the new node by ID or by heading match
+        # Find the new node by ID
         node_id = props.get("ID")
         if node_id:
             result = self.find_by_id(node_id)

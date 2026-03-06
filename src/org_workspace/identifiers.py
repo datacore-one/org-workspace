@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import uuid
+import hashlib
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,8 +15,37 @@ class DuplicateIdError(Exception):
     """Raised when the same :ID: appears in multiple nodes (INV-3)."""
 
 
+def generate_id(
+    heading: str,
+    timestamp: datetime | None = None,
+    disambiguator: str | None = None,
+) -> str:
+    """Generate a content-addressed ID from heading text.
+
+    Format: org-YYYYMMDD-HHMMSS-{sha256(heading)[:8]}
+
+    The hash enables deduplication: same heading → same hash suffix.
+    The timestamp provides creation context and uniqueness.
+
+    If disambiguator is provided, it's mixed into the hash to produce
+    a unique ID even for identical headings created at the same time.
+    """
+    ts = timestamp or datetime.now()
+    hash_input = heading if disambiguator is None else f"{heading}\0{disambiguator}"
+    content_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:8]
+    return f"org-{ts.strftime('%Y%m%d-%H%M%S')}-{content_hash}"
+
+
+def heading_hash(heading: str) -> str:
+    """Return the 8-char content hash for a heading.
+
+    Used for dedup checks independent of timestamp.
+    """
+    return hashlib.sha256(heading.encode()).hexdigest()[:8]
+
+
 def ensure_id(node: OrgNode) -> str:
-    """Ensure node has an :ID: property. Generates UUID4 if missing.
+    """Ensure node has an :ID: property. Generates content-addressed ID if missing.
 
     Returns the (possibly new) ID value.
     """
@@ -23,7 +53,7 @@ def ensure_id(node: OrgNode) -> str:
     if existing:
         return existing
 
-    new_id = str(uuid.uuid4())
+    new_id = generate_id(node.heading)
     props = dict(node.properties)
     props["ID"] = new_id
     node.properties = props

@@ -1,22 +1,70 @@
 """Tests for identifiers.py — auto-ID and resolution."""
 
-import uuid
+import re
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 from orgparse import load, loads
 
-from org_workspace.identifiers import DuplicateIdError, IdIndex, ensure_id
+from org_workspace.identifiers import (
+    DuplicateIdError,
+    IdIndex,
+    ensure_id,
+    generate_id,
+    heading_hash,
+)
+
+_ID_PATTERN = re.compile(r"^org-\d{8}-\d{6}-[0-9a-f]{8}$")
+
+
+class TestGenerateId:
+    def test_format(self):
+        result = generate_id("Buy groceries")
+        assert _ID_PATTERN.match(result), f"Bad format: {result}"
+
+    def test_contains_date(self):
+        ts = datetime(2026, 3, 6, 14, 30, 22)
+        result = generate_id("Buy groceries", timestamp=ts)
+        assert "20260306-143022" in result
+
+    def test_same_heading_same_hash(self):
+        ts = datetime(2026, 3, 6, 14, 30, 22)
+        a = generate_id("Buy groceries", timestamp=ts)
+        b = generate_id("Buy groceries", timestamp=ts)
+        assert a == b
+
+    def test_different_heading_different_hash(self):
+        ts = datetime(2026, 3, 6, 14, 30, 22)
+        a = generate_id("Buy groceries", timestamp=ts)
+        b = generate_id("Write report", timestamp=ts)
+        assert a != b
+
+    def test_different_time_different_id(self):
+        a = generate_id("Buy groceries", datetime(2026, 1, 1, 0, 0, 0))
+        b = generate_id("Buy groceries", datetime(2026, 1, 2, 0, 0, 0))
+        assert a != b
+        # But same hash suffix
+        assert a.split("-")[-1] == b.split("-")[-1]
+
+
+class TestHeadingHash:
+    def test_deterministic(self):
+        assert heading_hash("Buy groceries") == heading_hash("Buy groceries")
+
+    def test_different_for_different_headings(self):
+        assert heading_hash("Buy groceries") != heading_hash("Write report")
+
+    def test_length(self):
+        assert len(heading_hash("anything")) == 8
 
 
 class TestEnsureId:
-    def test_generates_uuid_when_missing(self):
+    def test_generates_content_addressed_id_when_missing(self):
         root = loads("* TODO Task without ID\n")
         node = root.children[0]
         result = ensure_id(node)
-        # Should be a valid UUID
-        uuid.UUID(result)  # raises if invalid
-        # Should be set on the node
+        assert _ID_PATTERN.match(result), f"Bad format: {result}"
         assert node.properties["ID"] == result
 
     def test_preserves_existing_id(self):

@@ -282,6 +282,56 @@ class TestCreateNode:
         with pytest.raises(ValueError, match="not loaded"):
             ws.create_node(Path("/fake/path.org"), "Task")
 
+    def test_auto_id_assigned(self, ws_two_files):
+        """create_node auto-assigns a content-addressed :ID:."""
+        import re
+
+        ws, f1, _ = ws_two_files
+        new = ws.create_node(f1, "Auto ID task", state="TODO")
+        node_id = new.id()
+        assert node_id is not None
+        assert re.match(r"^org-\d{8}-\d{6}-[0-9a-f]{8}$", node_id)
+
+    def test_auto_created_timestamp(self, ws_two_files):
+        """create_node auto-assigns :CREATED: timestamp."""
+        ws, f1, _ = ws_two_files
+        new = ws.create_node(f1, "Timestamped task", state="TODO")
+        created = new.properties.get("CREATED")
+        assert created is not None
+        assert created.startswith("[20")
+        assert created.endswith("]")
+
+    def test_explicit_id_preserved(self, ws_two_files):
+        """Explicit ID= kwarg is not overwritten by auto-ID."""
+        ws, f1, _ = ws_two_files
+        new = ws.create_node(f1, "Custom ID", state="TODO", ID="my-custom-id")
+        assert new.id() == "my-custom-id"
+
+    def test_dedup_returns_existing(self, ws_two_files):
+        """dedup=True returns existing node if heading hash matches."""
+        ws, f1, _ = ws_two_files
+        first = ws.create_node(f1, "Unique task", state="TODO")
+        first_id = first.id()
+        second = ws.create_node(f1, "Unique task", state="TODO", dedup=True)
+        assert second.id() == first_id
+
+    def test_dedup_false_creates_duplicate(self, ws_two_files):
+        """dedup=False (default) creates a new node even with same heading."""
+        ws, f1, _ = ws_two_files
+        first = ws.create_node(f1, "Repeated task", state="TODO")
+        first_id = first.id()  # capture before second create stales it
+        second = ws.create_node(f1, "Repeated task", state="TODO")
+        assert first_id != second.id()
+
+    def test_id_contains_heading_hash(self, ws_two_files):
+        """The auto-ID suffix matches heading_hash()."""
+        from org_workspace.identifiers import heading_hash
+
+        ws, f1, _ = ws_two_files
+        new = ws.create_node(f1, "Hash check task", state="TODO")
+        expected_hash = heading_hash("Hash check task")
+        assert new.id().endswith(f"-{expected_hash}")
+
 
 class TestRemoveNode:
     def test_remove_node(self, ws_two_files):
