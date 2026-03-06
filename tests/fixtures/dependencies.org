@@ -1,0 +1,30 @@
+* Project Alpha
+** TODO Design API schema
+   :PROPERTIES:
+   :ID: dep-001
+   :DEPENDS_ON: |
+   :   BLOCKS dep-002 "Implement endpoints"
+   :   BLOCKS dep-003 "Write API docs"
+   :END:
+** TODO Implement endpoints
+   :PROPERTIES:
+   :ID: dep-002
+   :DEPENDS_ON: AFTER dep-001 "Design API schema"
+   :END:
+** TODO Write API docs
+   :PROPERTIES:
+   :ID: dep-003
+   :DEPENDS_ON: AFTER dep-001 "Design API schema"
+   :END:
+** TODO Deploy to staging
+   :PROPERTIES:
+   :ID: dep-004
+   :DEPENDS_ON: |
+   :   AFTER dep-002 "Implement endpoints"
+   :   AFTER dep-003 "Write API docs"
+   :END:
+** TODO Final review
+   :PROPERTIES:
+   :ID: dep-005
+   :DEPENDS_ON: AFTER dep-004 "Deploy to staging"
+   :END:

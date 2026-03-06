@@ -1,0 +1,28 @@
+#+TODO: TODO NEXT WAITING QUEUED EXECUTING REVIEW | DONE CANCELLED FAILED
+* Nightshift Queue
+** QUEUED Research market trends :AI:research:
+   :PROPERTIES:
+   :ID: ns-001
+   :Effort: 2:00
+   :PROMPT: Research current DeFi market trends and summarize key findings
+   :END:
+** EXECUTING Process inbox items :AI:
+   :PROPERTIES:
+   :ID: ns-002
+   :Effort: 1:00
+   :CLAIMED_BY: nightshift-agent
+   :CLAIMED_AT: [2025-11-28 Thu 01:00]
+   :END:
+** DONE Generate weekly report :AI:data:
+   :PROPERTIES:
+   :ID: ns-003
+   :Effort: 0:30
+   :COMPLETED_BY: nightshift-agent
+   :END:
+   CLOSED: [2025-11-28 Thu 03:00]
+** FAILED Send newsletter :AI:content:
+   :PROPERTIES:
+   :ID: ns-004
+   :Effort: 1:00
+   :FAILURE_REASON: API rate limit exceeded
+   :END:

@@ -1,0 +1,8 @@
+* Personal
+** DONE Old completed task
+   :PROPERTIES:
+   :ID: mf-arc-001
+   :ARCHIVE_TIME: [2025-10-15 Wed]
+   :ARCHIVE_REASON: completed
+   :END:
+   CLOSED: [2025-10-14 Tue 16:00]

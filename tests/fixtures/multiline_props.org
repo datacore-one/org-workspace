@@ -1,0 +1,13 @@
+* TODO Task with multiline properties
+  :PROPERTIES:
+  :ID: ml-001
+  :CONTEXT: |
+  :   First line of context
+  :   Second line of context
+  :   Third line of context
+  :KEY_FILES: |
+  :   src/auth.py
+  :   src/models.py
+  :   tests/test_auth.py
+  :SIMPLE_PROP: just a value
+  :END:

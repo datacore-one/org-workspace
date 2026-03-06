@@ -1,0 +1,22 @@
+* Personal
+** TODO Buy groceries
+   :PROPERTIES:
+   :ID: mf-001
+   :END:
+** NEXT Write blog post :writing:
+   :PROPERTIES:
+   :ID: mf-002
+   :Effort: 2:00
+   :END:
+* Work
+** WAITING Review PR from team :AI:
+   :PROPERTIES:
+   :ID: mf-003
+   :Effort: 0:30
+   :END:
+** TODO Deploy staging environment :backend:
+   :PROPERTIES:
+   :ID: mf-004
+   :Effort: 1:00
+   :DEPENDS_ON: AFTER mf-003 "Review PR from team"
+   :END:

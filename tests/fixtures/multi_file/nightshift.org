@@ -1,0 +1,7 @@
+#+TODO: TODO NEXT WAITING QUEUED EXECUTING REVIEW | DONE CANCELLED FAILED
+* Nightshift Queue
+** QUEUED Summarize meeting notes :AI:content:
+   :PROPERTIES:
+   :ID: mf-ns-001
+   :Effort: 0:30
+   :END:

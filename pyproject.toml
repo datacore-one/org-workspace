@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "org-workspace"
+version = "0.1.0"
+description = "Python library making org-mode files first-class citizens for AI agent workflows"
+readme = "README.md"
+license = "BSD-2-Clause"
+requires-python = ">=3.10"
+authors = [
+    { name = "Datacore", email = "hello@datacore.one" },
+]
+dependencies = [
+    "orgparse @ git+https://github.com/datacore-one/orgparse.git@pr-77",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.coverage.run]
+source = ["org_workspace"]
+
+[tool.coverage.report]
+show_missing = true

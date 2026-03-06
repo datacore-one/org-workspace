@@ -1,0 +1,10 @@
+* TODO Simple task
+  :PROPERTIES:
+  :ID: 550e8400-e29b-41d4-a716-446655440001
+  :END:
+  A simple task body.
+* DONE Completed task
+  :PROPERTIES:
+  :ID: 550e8400-e29b-41d4-a716-446655440002
+  :END:
+  CLOSED: [2025-11-28 Thu 14:30]
