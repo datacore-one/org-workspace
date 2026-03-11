@@ -11,10 +11,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from orgparse.lines import TextLine
+from org_workspace._vendor.orgparse.lines import TextLine
 
 if TYPE_CHECKING:
-    from orgparse.node import OrgNode
+    from org_workspace._vendor.orgparse.node import OrgNode
 
 
 def _format_timestamp(dt: datetime | None = None) -> str:

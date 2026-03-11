@@ -11,17 +11,17 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from orgparse import dumps as _orgparse_dumps
-from orgparse.lines import TextLine
-from orgparse.node import OrgNode
+from org_workspace._vendor.orgparse import dumps as _orgparse_dumps
+from org_workspace._vendor.orgparse.lines import TextLine
+from org_workspace._vendor.orgparse.node import OrgNode
 
 if TYPE_CHECKING:
-    from orgparse.node import OrgBaseNode
+    from org_workspace._vendor.orgparse.node import OrgBaseNode
 
 # --- Compatibility assertions ---
-# Fail fast if orgparse internals change (PR #77 required)
+# Fail fast if vendored orgparse has the required internals (PR #77 features)
 # _line_items is an instance attr (set in __init__), so we probe a parsed node.
-from orgparse import loads as _loads
+from org_workspace._vendor.orgparse import loads as _loads
 
 _probe = _loads("* probe\n").children[0]
 assert hasattr(_probe, "_line_items"), (

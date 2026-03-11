@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from orgparse.node import OrgNode
+    from org_workspace._vendor.orgparse.node import OrgNode
 
 
 class DuplicateIdError(Exception):

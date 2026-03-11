@@ -10,9 +10,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
-from orgparse import dumps as _orgparse_dumps
-from orgparse import load
-from orgparse.node import OrgNode, OrgRootNode
+from org_workspace._vendor.orgparse import dumps as _orgparse_dumps
+from org_workspace._vendor.orgparse import load
+from org_workspace._vendor.orgparse.node import OrgNode, OrgRootNode
 
 from org_workspace._compat import dumps
 from org_workspace._types import StateConfig

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from orgparse import loads
+from org_workspace._vendor.orgparse import loads
 
 from org_workspace._compat import dumps
 from org_workspace.log import (

@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from orgparse import load, loads
+from org_workspace._vendor.orgparse import load, loads
 
 from org_workspace.identifiers import (
     DuplicateIdError,

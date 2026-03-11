@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from orgparse import load
+from org_workspace._vendor.orgparse import load
 
 from org_workspace._compat import dumps
 from org_workspace._types import StateConfig

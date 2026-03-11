@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from org_workspace._types import ChecklistItem, parse_checklists
 
 if TYPE_CHECKING:
-    from orgparse.node import OrgNode
+    from org_workspace._vendor.orgparse.node import OrgNode
 
     from org_workspace._types import StateConfig
 

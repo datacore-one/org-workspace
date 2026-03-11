@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68.0", "setuptools-scm"]
+requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "org-workspace"
-version = "0.1.0"
+version = "0.3.0"
 description = "Python library making org-mode files first-class citizens for AI agent workflows"
 readme = "README.md"
 license = "BSD-2-Clause"
@@ -12,9 +12,25 @@ requires-python = ">=3.10"
 authors = [
     { name = "Datacore", email = "hello@datacore.one" },
 ]
-dependencies = [
-    "orgparse @ git+https://github.com/datacore-one/orgparse.git@pr-77",
+keywords = ["org-mode", "emacs", "gtd", "ai", "agents", "task-management"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
 ]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/datacore-one/org-workspace"
+Repository = "https://github.com/datacore-one/org-workspace"
+Issues = "https://github.com/datacore-one/org-workspace/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -25,6 +41,10 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"org_workspace" = ["py.typed"]
+"org_workspace._vendor.orgparse" = ["LICENSE", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
