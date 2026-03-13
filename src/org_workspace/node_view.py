@@ -15,6 +15,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from org_workspace._compat import get_multiline_property
 from org_workspace._types import ChecklistItem, parse_checklists
 
 if TYPE_CHECKING:
@@ -147,6 +148,16 @@ class NodeView:
         """Read :ID: property, or None if not set."""
         self._check_stale()
         return self._node.properties.get("ID")
+
+    def get_property(self, key: str) -> str | None:
+        """Read a property with multiline continuation support.
+
+        For standard properties, returns the value directly.
+        For multiline properties (`:KEY: |`), reads continuation lines
+        and returns the joined value.
+        """
+        self._check_stale()
+        return get_multiline_property(self._node, key)
 
     # --- Pure computation methods ---
 

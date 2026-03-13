@@ -56,6 +56,11 @@ class TestNodeViewReadOnly:
         view = _make_view("* TODO Task without ID\n")
         assert view.id() is None
 
+    def test_get_property_simple(self):
+        view = _make_view("* TODO Task\n  :PROPERTIES:\n  :ID: abc\n  :STATUS: active\n  :END:\n")
+        assert view.get_property("STATUS") == "active"
+        assert view.get_property("MISSING") is None
+
     def test_from_file(self, rich_task_org):
         root = load(str(rich_task_org))
         node = root.children[0]

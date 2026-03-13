@@ -10,6 +10,7 @@ from org_workspace._vendor.orgparse import load, loads
 from org_workspace.identifiers import (
     DuplicateIdError,
     IdIndex,
+    dedup_ids,
     ensure_id,
     generate_id,
     heading_hash,
@@ -142,3 +143,58 @@ class TestIdIndex:
         idx.add_file(minimal_org, root)
         assert "550e8400-e29b-41d4-a716-446655440001" in idx
         assert "nonexistent" not in idx
+
+    def test_all_ids(self, minimal_org):
+        idx = IdIndex()
+        root = load(str(minimal_org))
+        idx.add_file(minimal_org, root)
+        ids = idx.all_ids()
+        assert "550e8400-e29b-41d4-a716-446655440001" in ids
+        assert len(ids) == 2
+
+
+class TestDedupIds:
+    """Test dedup_ids: regenerate IDs for duplicates within a tree."""
+
+    def test_no_duplicates_no_changes(self):
+        root = loads(
+            "* TODO Task A\n  :PROPERTIES:\n  :ID: id-a\n  :END:\n"
+            "* TODO Task B\n  :PROPERTIES:\n  :ID: id-b\n  :END:\n"
+        )
+        changes = dedup_ids(root)
+        assert changes == []
+
+    def test_duplicate_within_file(self):
+        root = loads(
+            "* TODO Task A\n  :PROPERTIES:\n  :ID: same-id\n  :END:\n"
+            "* TODO Task B\n  :PROPERTIES:\n  :ID: same-id\n  :END:\n"
+        )
+        changes = dedup_ids(root)
+        assert len(changes) == 1
+        node, old_id, new_id = changes[0]
+        assert old_id == "same-id"
+        assert new_id != "same-id"
+        # First node keeps original
+        assert root.children[0].properties["ID"] == "same-id"
+        # Second node gets new ID
+        assert root.children[1].properties["ID"] == new_id
+
+    def test_collision_with_existing_ids(self):
+        root = loads("* TODO Task\n  :PROPERTIES:\n  :ID: taken-id\n  :END:\n")
+        changes = dedup_ids(root, existing_ids={"taken-id"})
+        assert len(changes) == 1
+        _, old_id, new_id = changes[0]
+        assert old_id == "taken-id"
+        assert new_id != "taken-id"
+
+    def test_triple_duplicate(self):
+        root = loads(
+            "* A\n  :PROPERTIES:\n  :ID: x\n  :END:\n"
+            "* B\n  :PROPERTIES:\n  :ID: x\n  :END:\n"
+            "* C\n  :PROPERTIES:\n  :ID: x\n  :END:\n"
+        )
+        changes = dedup_ids(root)
+        assert len(changes) == 2
+        # All three nodes should have unique IDs
+        ids = [root.children[i].properties["ID"] for i in range(3)]
+        assert len(set(ids)) == 3

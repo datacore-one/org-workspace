@@ -14,9 +14,9 @@ from org_workspace._vendor.orgparse import dumps as _orgparse_dumps
 from org_workspace._vendor.orgparse import load
 from org_workspace._vendor.orgparse.node import OrgNode, OrgRootNode
 
-from org_workspace._compat import dumps
+from org_workspace._compat import dumps, get_multiline_property, set_multiline_property
 from org_workspace._types import StateConfig
-from org_workspace.identifiers import IdIndex, generate_id, heading_hash
+from org_workspace.identifiers import IdIndex, dedup_ids, generate_id, heading_hash
 from org_workspace.node_view import NodeView
 
 
@@ -127,12 +127,23 @@ class OrgWorkspace:
     # --- File operations ---
 
     def load(self, path: Path) -> None:
-        """Load or reload an org file into the workspace."""
+        """Load or reload an org file into the workspace.
+
+        Automatically deduplicates IDs: if two nodes in the file share
+        an ID (or collide with an already-indexed ID), the later node
+        gets a regenerated unique ID and the file is saved to disk.
+        """
         path = Path(path).resolve()
         # If reloading, remove old index entries and bump generation
         if path in self._files:
             self._id_index.remove_file(path)
         root = load(str(path))
+        # Dedup IDs before indexing — regenerate collisions
+        changes = dedup_ids(root, existing_ids=self._id_index.all_ids())
+        if changes:
+            content = dumps(root)
+            path.write_text(content)
+            self._dirty.discard(path)  # just written, not dirty
         self._files[path] = root
         self._dirty.discard(path)
         self._generations[path] = self._generations.get(path, 0) + 1
@@ -148,6 +159,10 @@ class OrgWorkspace:
         if path in self._files:
             self._id_index.remove_file(path)
         root = load(str(path))
+        changes = dedup_ids(root, existing_ids=self._id_index.all_ids())
+        if changes:
+            content = dumps(root)
+            path.write_text(content)
         self._files[path] = root
         self._generations[path] = self._generations.get(path, 0) + 1
         self._id_index.add_file(path, root)
@@ -253,12 +268,27 @@ class OrgWorkspace:
             self.set_property(node, "COMPLETED_BY", agent)
 
     def set_property(self, node: NodeView, key: str, value: str) -> None:
-        """Set a property on a node using read-copy-merge-assign protocol."""
+        """Set a property on a node.
+
+        Multiline values (containing newlines) are stored using the Datacore
+        continuation format (`:KEY: |` + `:   line` continuations).
+        Single-line values use the standard read-copy-merge-assign protocol.
+        """
         raw_node = node.node
-        props = dict(raw_node.properties)
-        props[key] = value
-        raw_node.properties = props
+        if "\n" in value:
+            set_multiline_property(raw_node, key, value)
+        else:
+            props = dict(raw_node.properties)
+            props[key] = value
+            raw_node.properties = props
         self._mark_dirty(node.path)
+
+    def get_property(self, node: NodeView, key: str) -> str | None:
+        """Get a property from a node, with multiline continuation support.
+
+        Returns the full value for multiline properties (`:KEY: |` format).
+        """
+        return get_multiline_property(node.node, key)
 
     def set_heading(self, node: NodeView, text: str) -> None:
         """Change a node's heading text."""

@@ -176,6 +176,29 @@ class TestSetProperty:
         assert node.properties["NEW_KEY"] == "new_value"
 
 
+    def test_set_multiline_property(self, ws_two_files):
+        ws, f1, _ = ws_two_files
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        ws.set_property(node, "CONTEXT", "Line one\nLine two\nLine three")
+        # Verify via get_property (multiline-aware)
+        result = ws.get_property(node, "CONTEXT")
+        assert result is not None
+        assert "Line one" in result
+        assert "Line three" in result
+        assert f1 in ws.dirty_files()
+
+    def test_get_property_single_line(self, ws_two_files):
+        ws, _, _ = ws_two_files
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        ws.set_property(node, "STATUS", "active")
+        assert ws.get_property(node, "STATUS") == "active"
+
+    def test_get_property_missing(self, ws_two_files):
+        ws, _, _ = ws_two_files
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        assert ws.get_property(node, "NONEXISTENT") is None
+
+
 class TestSetHeading:
     def test_set_heading(self, ws_two_files):
         ws, f1, _ = ws_two_files
@@ -438,3 +461,57 @@ class TestReloadStaleness:
         ws.reload(f1)
         with pytest.raises(StaleNodeError):
             _ = node.heading
+
+
+class TestDuplicateIdDedup:
+    """Workspace deduplicates IDs on load instead of crashing."""
+
+    def test_dedup_within_file(self, tmp_path):
+        f = tmp_path / "dupes.org"
+        f.write_text(
+            "* TODO Task A\n"
+            "  :PROPERTIES:\n"
+            "  :ID: same-id\n"
+            "  :END:\n"
+            "* TODO Task B\n"
+            "  :PROPERTIES:\n"
+            "  :ID: same-id\n"
+            "  :END:\n"
+        )
+        ws = OrgWorkspace(roots=[f])  # should not raise
+        # First node keeps original ID
+        node_a = ws.find_by_id("same-id")
+        assert node_a is not None
+        assert node_a.heading == "Task A"
+        # Both nodes should be findable (second got a new ID)
+        nodes = list(ws.all_nodes())
+        assert len(nodes) == 2
+        ids = {n.id() for n in nodes}
+        assert "same-id" in ids
+        assert len(ids) == 2  # two distinct IDs
+
+    def test_dedup_across_files(self, tmp_path):
+        f1 = tmp_path / "a.org"
+        f2 = tmp_path / "b.org"
+        f1.write_text("* TODO Task A\n  :PROPERTIES:\n  :ID: shared-id\n  :END:\n")
+        f2.write_text("* TODO Task B\n  :PROPERTIES:\n  :ID: shared-id\n  :END:\n")
+        ws = OrgWorkspace(roots=[f1, f2])  # should not raise
+        # First loaded file keeps original
+        node_a = ws.find_by_id("shared-id")
+        assert node_a is not None
+        assert node_a.heading == "Task A"
+        # Second file's node got regenerated ID
+        nodes = list(ws.all_nodes())
+        ids = {n.id() for n in nodes}
+        assert len(ids) == 2
+
+    def test_dedup_persisted_to_disk(self, tmp_path):
+        f = tmp_path / "dupes.org"
+        f.write_text(
+            "* TODO Task A\n  :PROPERTIES:\n  :ID: dup\n  :END:\n"
+            "* TODO Task B\n  :PROPERTIES:\n  :ID: dup\n  :END:\n"
+        )
+        OrgWorkspace(roots=[f])
+        # File should have been rewritten with unique IDs
+        content = f.read_text()
+        assert content.count(":ID: dup") == 1  # only first kept original

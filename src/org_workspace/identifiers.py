@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from org_workspace._vendor.orgparse.node import OrgNode
+
+logger = logging.getLogger(__name__)
 
 
 class DuplicateIdError(Exception):
@@ -60,6 +64,44 @@ def ensure_id(node: OrgNode) -> str:
     return new_id
 
 
+def dedup_ids(root, existing_ids: set[str] | None = None) -> list[tuple[OrgNode, str, str]]:
+    """Find and fix duplicate IDs within a parsed tree.
+
+    Walks all nodes. When the same ID appears on multiple nodes,
+    the first occurrence keeps the original ID and subsequent
+    occurrences get a regenerated unique ID.
+
+    Also checks against existing_ids (IDs already in the workspace index).
+
+    Returns list of (node, old_id, new_id) for each regenerated ID.
+    """
+    seen: set[str] = set(existing_ids) if existing_ids else set()
+    changes: list[tuple[OrgNode, str, str]] = []
+
+    def _walk(node: OrgNode) -> None:
+        node_id = node.properties.get("ID")
+        if node_id:
+            if node_id in seen:
+                new_id = generate_id(node.heading, disambiguator=uuid.uuid4().hex[:8])
+                props = dict(node.properties)
+                props["ID"] = new_id
+                node.properties = props
+                changes.append((node, node_id, new_id))
+                logger.warning(
+                    "Duplicate ID '%s' on '%s' — regenerated as '%s'",
+                    node_id, node.heading, new_id,
+                )
+                seen.add(new_id)
+            else:
+                seen.add(node_id)
+        for child in node.children:
+            _walk(child)
+
+    for child in root.children:
+        _walk(child)
+    return changes
+
+
 class IdIndex:
     """Cross-file ID resolution index.
 
@@ -99,9 +141,12 @@ class IdIndex:
         """Resolve an ID to its (path, node) tuple, or None."""
         return self._index.get(node_id)
 
+    def all_ids(self) -> set[str]:
+        """Return all IDs currently in the index."""
+        return set(self._index.keys())
+
     def duplicates(self) -> list[str]:
         """Return list of duplicate IDs. (Always empty if add_file enforced.)"""
-        # This exists for diagnostic use; add_file prevents duplicates
         return []
 
     def remove_file(self, path: Path) -> None:
