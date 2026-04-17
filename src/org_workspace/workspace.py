@@ -6,7 +6,7 @@ The workspace owns all mutations. NodeView is read-only.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator
 
@@ -289,6 +289,43 @@ class OrgWorkspace:
         Returns the full value for multiline properties (`:KEY: |` format).
         """
         return get_multiline_property(node.node, key)
+
+    def set_scheduled(self, node: NodeView, value: "date | datetime | None") -> None:
+        """Set or clear the SCHEDULED timestamp on a node.
+
+        Args:
+            node: Target node.
+            value: A date, datetime, or None to clear.
+        """
+        raw_node = node.node
+        raw_node.scheduled = value
+        self._mark_dirty(node.path)
+
+    def set_deadline(self, node: NodeView, value: "date | datetime | None") -> None:
+        """Set or clear the DEADLINE timestamp on a node.
+
+        Args:
+            node: Target node.
+            value: A date, datetime, or None to clear.
+        """
+        raw_node = node.node
+        raw_node.deadline = value
+        self._mark_dirty(node.path)
+
+    def set_closed(self, node: NodeView, value: "datetime | None") -> None:
+        """Set or clear the CLOSED timestamp on a node.
+
+        Normally CLOSED is set automatically by transition() to a terminal
+        state.  This method allows manual override (e.g. retroactive
+        completion).
+
+        Args:
+            node: Target node.
+            value: A datetime, or None to clear.
+        """
+        raw_node = node.node
+        raw_node.closed = value
+        self._mark_dirty(node.path)
 
     def set_heading(self, node: NodeView, text: str) -> None:
         """Change a node's heading text."""

@@ -1,6 +1,7 @@
 """Tests for workspace.py — OrgWorkspace multi-file container."""
 
 import shutil
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -136,6 +137,51 @@ class TestTransition:
         assert node.todo == "DONE"
         with pytest.raises(InvalidTransitionError):
             ws.transition(node, "TODO")
+
+    def test_set_scheduled(self, ws_two_files):
+        ws, f1, _ = ws_two_files
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        assert node.scheduled is None or not node.scheduled.start
+        ws.set_scheduled(node, date(2026, 5, 1))
+        assert f1 in ws.dirty_files()
+        ws.save()
+        # Reload and verify
+        ws.reload(f1)
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        assert node.scheduled is not None
+        assert node.scheduled.start.year == 2026
+        assert node.scheduled.start.month == 5
+        assert node.scheduled.start.day == 1
+
+    def test_set_deadline(self, ws_two_files):
+        ws, f1, _ = ws_two_files
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        ws.set_deadline(node, date(2026, 6, 15))
+        ws.save()
+        ws.reload(f1)
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        assert node.deadline is not None
+        assert node.deadline.start.day == 15
+
+    def test_clear_scheduled(self, ws_two_files):
+        ws, f1, _ = ws_two_files
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        ws.set_scheduled(node, date(2026, 5, 1))
+        ws.save()
+        ws.reload(f1)
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        ws.set_scheduled(node, None)
+        ws.save()
+        ws.reload(f1)
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        assert not node.scheduled or not node.scheduled.start
+
+    def test_set_closed_manual(self, ws_two_files):
+        ws, f1, _ = ws_two_files
+        node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
+        now = datetime.now()
+        ws.set_closed(node, now)
+        assert f1 in ws.dirty_files()
 
     def test_unknown_state_raises(self, ws_two_files):
         ws, _, _ = ws_two_files
