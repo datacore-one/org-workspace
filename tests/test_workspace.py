@@ -244,6 +244,45 @@ class TestSetProperty:
         node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
         assert ws.get_property(node, "NONEXISTENT") is None
 
+    def test_set_property_with_interleaved_logbook_drawer(self, tmp_path):
+        """Regression: malformed source with LOGBOOK enclosing PROPERTIES
+        used to crash the properties setter with
+        'PropertyDrawerEndLine not in list'.
+
+        Real-world incident 2026-05-16: nodes in next_actions.org had
+        LOGBOOK lines before PROPERTIES; the parser bound drawer.end_line
+        to a synthetic PropertyDrawerEndLine that wasn't in _line_items
+        (the actual :END: line had been parsed as TextLine). The setter
+        then failed at _line_items.index(drawer.end_line). See
+        org-20260517-orgworkspace-truncation-bug.
+        """
+        from org_workspace import OrgWorkspace
+        text = (
+            "* PROJECT Dubai Gold Pilot\n"
+            ":LOGBOOK:\n"
+            '- State "PROJECT"    from              [2025-11-26 Wed 15:08]\n'
+            ":PROPERTIES:\n"
+            ":NIGHTSHIFT_STATUS: approved\n"
+            ":END:\n"
+            ":END:\n"
+            "\n"
+            "    body text after the drawers\n"
+        )
+        f = tmp_path / "interleaved.org"
+        f.write_text(text)
+        ws = OrgWorkspace()
+        ws.load(f)
+        node = next(ws.all_nodes())
+        # Must not raise. Should add the ID into the existing drawer.
+        ws.set_property(node, "ID", "org-test-recovery")
+        assert node.properties.get("ID") == "org-test-recovery"
+        ws.save(f)
+        result = f.read_text()
+        # Original body must survive (no truncation)
+        assert "body text after the drawers" in result
+        # New ID must be present
+        assert "org-test-recovery" in result
+
 
 class TestSetHeading:
     def test_set_heading(self, ws_two_files):

@@ -36,7 +36,7 @@ from org_workspace.prompt import get_prompt, get_role
 from org_workspace.query import Query
 from org_workspace.workspace import InvalidTransitionError, OrgWorkspace
 
-__version__ = "0.3.0"
+__version__ = "0.4.1"
 
 __all__ = [
     # Core types

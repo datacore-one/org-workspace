@@ -692,8 +692,8 @@ class OrgBaseNode(Sequence):
             render_values[key] = render_value
         if not normalized:
             if self._property_drawer is not None:
-                start_index = self._line_items.index(self._property_drawer.start_line)
-                end_index = self._line_items.index(self._property_drawer.end_line)
+                start_index = self._resolve_drawer_start_index(self._property_drawer)
+                end_index = self._resolve_drawer_end_index(self._property_drawer)
                 for index in range(end_index, start_index - 1, -1):
                     self._remove_line_item(index)
                 self._property_drawer = None
@@ -721,7 +721,7 @@ class OrgBaseNode(Sequence):
             if entries:
                 entries[-1].update_value(prop_value, render_value)
             else:
-                insert_index = self._line_items.index(drawer.end_line)
+                insert_index = self._resolve_drawer_end_index(drawer)
                 entry = PropertyEntryLine(
                     raw=f"{drawer.indent}:{key}: {render_value}" if render_value else f"{drawer.indent}:{key}:",
                     key=key,
@@ -772,6 +772,51 @@ class OrgBaseNode(Sequence):
         if key == "Effort" and isinstance(value, str):
             return (parse_duration_to_minutes(value), value)
         return (value, str(value))
+
+    def _resolve_drawer_end_index(self, drawer: "PropertyDrawer") -> int:
+        """Locate drawer.end_line in _line_items, recovering from parser
+        mismatches.
+
+        When the source has a malformed structure (e.g. a LOGBOOK drawer
+        interleaved with a PROPERTIES drawer, where the actual `:END:`
+        line that closes the property drawer was parsed as TextLine
+        instead of PropertyDrawerEndLine), the synthetic PropertyDrawerEndLine
+        in drawer.end_line is not in _line_items. Walk forward from
+        drawer.start_line and re-bind drawer.end_line to the first line
+        whose rendered text is `:END:`.
+        """
+        try:
+            return self._line_items.index(drawer.end_line)
+        except ValueError:
+            try:
+                start_index = self._line_items.index(drawer.start_line)
+            except ValueError:
+                start_index = -1
+            for i in range(start_index + 1, len(self._line_items)):
+                item = self._line_items[i]
+                if item.render().strip().upper() == ":END:":
+                    drawer.end_line = item
+                    return i
+            raise ValueError(
+                "PropertyDrawer end_line not found in _line_items "
+                "and no recoverable ':END:' line follows the drawer start"
+            )
+
+    def _resolve_drawer_start_index(self, drawer: "PropertyDrawer") -> int:
+        """Locate drawer.start_line in _line_items, recovering from parser
+        mismatches in the same way as _resolve_drawer_end_index.
+        """
+        try:
+            return self._line_items.index(drawer.start_line)
+        except ValueError:
+            for i, item in enumerate(self._line_items):
+                if item.render().strip().upper() == ":PROPERTIES:":
+                    drawer.start_line = item
+                    return i
+            raise ValueError(
+                "PropertyDrawer start_line not found in _line_items "
+                "and no ':PROPERTIES:' line is present"
+            )
 
     def _create_property_drawer(self) -> PropertyDrawer:
         insert_at = self._property_drawer_insert_index()
