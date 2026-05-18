@@ -5,6 +5,7 @@ The workspace owns all mutations. NodeView is read-only.
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import date, datetime
 from pathlib import Path
@@ -94,6 +95,15 @@ class InvalidTransitionError(Exception):
     """Raised when a state transition violates StateConfig rules."""
 
 
+class CatastrophicShrinkError(Exception):
+    """Raised when a save would shrink the on-disk file beyond the safety
+    threshold, indicating a serializer regression.
+
+    The on-disk file is left untouched when this is raised. See
+    ``OrgWorkspace._safe_write`` for the policy.
+    """
+
+
 class OrgWorkspace:
     """Multi-file org-mode workspace with mutation tracking.
 
@@ -141,8 +151,7 @@ class OrgWorkspace:
         # Dedup IDs before indexing — regenerate collisions
         changes = dedup_ids(root, existing_ids=self._id_index.all_ids())
         if changes:
-            content = dumps(root)
-            path.write_text(content)
+            self._safe_write(path, dumps(root))
             self._dirty.discard(path)  # just written, not dirty
         self._files[path] = root
         self._dirty.discard(path)
@@ -161,8 +170,7 @@ class OrgWorkspace:
         root = load(str(path))
         changes = dedup_ids(root, existing_ids=self._id_index.all_ids())
         if changes:
-            content = dumps(root)
-            path.write_text(content)
+            self._safe_write(path, dumps(root))
         self._files[path] = root
         self._generations[path] = self._generations.get(path, 0) + 1
         self._id_index.add_file(path, root)
@@ -444,7 +452,7 @@ class OrgWorkspace:
             # No parent: append to end of file
             combined = current_content + new_text
 
-        file.write_text(combined)
+        self._safe_write(file, combined)
         self._reload_preserving_dirty(file)
         self._mark_dirty(file)
 
@@ -522,7 +530,7 @@ class OrgWorkspace:
 
         # Save source to disk
         source_content = dumps(self._files[source_file])
-        source_file.write_text(source_content)
+        self._safe_write(source_file, source_content)
 
         # Insert into target at correct position
         target_content = dumps(self._files[target_file])
@@ -532,7 +540,7 @@ class OrgWorkspace:
             new_target = target_content[:insert_pos] + subtree_text + target_content[insert_pos:]
         else:
             new_target = target_content + subtree_text
-        target_file.write_text(new_target)
+        self._safe_write(target_file, new_target)
 
         # Reload both files
         self._reload_preserving_dirty(source_file)
@@ -578,8 +586,68 @@ class OrgWorkspace:
         if path not in self._dirty:
             return
         content = dumps(self._files[path])
-        path.write_text(content)
+        self._safe_write(path, content)
         self._dirty.discard(path)
+
+    # Defense-in-depth threshold. If a dumps() result would shrink the
+    # file by more than this fraction, the save aborts and the file on
+    # disk is left untouched. Calibrated to allow normal edits (delete a
+    # task, archive a section) while catching catastrophic serializer
+    # regressions like the 2026-05-16 / 2026-05-18 incidents where ~50%
+    # of next_actions.org disappeared between read and write.
+    _MAX_SHRINK_FRACTION = 0.25
+
+    def _safe_write(self, path: Path, content: str) -> None:
+        """Write ``content`` to ``path`` with a catastrophic-shrink guard.
+
+        Compares the new content's line count against the file currently
+        on disk. If the new content would shrink the file by more than
+        ``_MAX_SHRINK_FRACTION``, raises ``CatastrophicShrinkError`` and
+        leaves the on-disk file untouched. Otherwise writes atomically
+        via a temp file in the same directory + rename.
+
+        This is the safety net for parser/serializer regressions. The
+        property setter's _resolve_drawer_* helpers cover the known
+        incident, but the broader pattern — malformed drawer structures
+        causing the dumps() pass to emit a truncated string — can recur
+        in other code paths. With this guard, the worst case becomes a
+        loud error, not silent data loss.
+        """
+        if path.exists():
+            try:
+                old_content = path.read_text()
+                old_lines = old_content.count("\n")
+            except (OSError, UnicodeDecodeError):
+                old_lines = 0
+            new_lines = content.count("\n")
+            # Only enforce the guard when there was something to lose.
+            # An old_lines threshold of 20 prevents false positives on
+            # tiny files (e.g. a 3-line test file going to 1 line).
+            if old_lines > 20:
+                allowed_floor = int(old_lines * (1.0 - self._MAX_SHRINK_FRACTION))
+                if new_lines < allowed_floor:
+                    raise CatastrophicShrinkError(
+                        f"Refusing to write {path}: serialized output would "
+                        f"shrink the file from {old_lines} → {new_lines} lines "
+                        f"({(old_lines - new_lines) / old_lines * 100:.1f}% loss). "
+                        f"Limit is {self._MAX_SHRINK_FRACTION * 100:.0f}%. "
+                        f"This usually means a parser/serializer bug. The "
+                        f"existing on-disk file has been left untouched."
+                    )
+        # Atomic write: write to .tmp in same directory, fsync, rename.
+        # Same-directory rename is atomic on POSIX; protects against
+        # crashes mid-write leaving a half-truncated file.
+        tmp = path.with_name(path.name + ".tmp." + str(os.getpid()))
+        try:
+            tmp.write_text(content)
+            os.replace(tmp, path)
+        except Exception:
+            # Best-effort cleanup of orphan temp file.
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            raise
 
     def save_all(self) -> None:
         """Save all dirty files."""

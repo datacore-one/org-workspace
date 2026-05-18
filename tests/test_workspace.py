@@ -283,6 +283,113 @@ class TestSetProperty:
         # New ID must be present
         assert "org-test-recovery" in result
 
+    def test_set_property_with_logbook_nested_inside_properties(self, tmp_path):
+        """Regression: malformed task with :LOGBOOK: drawer nested INSIDE
+        the :PROPERTIES: drawer.
+
+        Real-world incident 2026-05-18: the live next_actions.org had a
+        DONE task whose :PROPERTIES: drawer contained both regular
+        properties and an interleaved :LOGBOOK: drawer with its own
+        :ID:, followed by a second :ID: outside the LOGBOOK but inside
+        the outer :END:. Setting a property on a neighbouring task
+        caused the save pipeline to truncate ~2000 lines from the file.
+
+        The parser treats `LOGBOOK` as a property key (with `:CLOCK:`
+        as its value) on the outer drawer, which leaves the inner
+        :END: lines in an ambiguous state during render.
+
+        The test ensures:
+          1. Loading the malformed task does not raise.
+          2. Setting a property on a DIFFERENT task does not lose lines.
+          3. The malformed task itself is preserved verbatim.
+        """
+        from org_workspace import OrgWorkspace
+        text = (
+            "*** DONE Malformed task\n"
+            "SCHEDULED: <2026-05-14 Thu> CLOSED: [2026-05-14 Thu 11:48]\n"
+            ":PROPERTIES:\n"
+            ":CREATED: [2026-05-14 Thu 09:11]\n"
+            ":EFFORT: 2:30\n"
+            ":CONTEXT: Long context line\n"
+            ":LOGBOOK:\n"
+            "CLOCK: [2026-05-14 Thu 09:11]--[2026-05-14 Thu 11:48] =>  2:37\n"
+            ":ID: org-inner-logbook-id\n"
+            ":END:\n"
+            ":ID: org-outer-real-id\n"
+            ":END:\n"
+            "\n"
+            "*** TODO Next task — must survive intact\n"
+            "SCHEDULED: <2026-05-20 Wed>\n"
+            ":PROPERTIES:\n"
+            ":ID: org-after-task\n"
+            ":END:\n"
+            "Body line 1\n"
+            "Body line 2\n"
+            "Body line 3\n"
+        )
+        f = tmp_path / "nested_logbook.org"
+        f.write_text(text)
+
+        before_lines = text.count("\n")
+
+        ws = OrgWorkspace()
+        ws.load(f)
+
+        # Touch a property on the SECOND task — the one after the
+        # malformed structure. The 2026-05-18 incident's exact pattern.
+        after = ws.find_by_id("org-after-task")
+        assert after is not None, "Parser must still find the next task"
+        ws.set_property(after, "TEST_PROP", "test")
+        ws.save(f)
+
+        result = f.read_text()
+        after_lines = result.count("\n")
+
+        # Critical: must not silently lose >10% of the file.
+        assert after_lines >= before_lines - 1, (
+            f"File shrunk catastrophically: {before_lines} → {after_lines} lines"
+        )
+        # The next task's body must survive.
+        assert "Body line 1" in result
+        assert "Body line 2" in result
+        assert "Body line 3" in result
+        # The malformed task's content must still be there.
+        assert "CLOCK: [2026-05-14 Thu 09:11]" in result
+        assert "Long context line" in result
+        # The new property landed somewhere.
+        assert "TEST_PROP" in result
+
+    def test_save_aborts_on_catastrophic_shrink(self, tmp_path, monkeypatch):
+        """Defense-in-depth: if dumps() ever returns a result that would
+        shrink the file by more than the safety threshold, save() must
+        raise instead of silently writing the truncated content.
+
+        This is the safety net for any future serializer bug — without
+        it, parser regressions cause silent data loss like the
+        2026-05-16 and 2026-05-18 incidents.
+        """
+        from org_workspace import OrgWorkspace
+        from org_workspace.workspace import CatastrophicShrinkError
+
+        text = "\n".join(f"* TODO Task {i}\n  Body for task {i}\n" for i in range(50))
+        f = tmp_path / "many.org"
+        f.write_text(text)
+
+        ws = OrgWorkspace()
+        ws.load(f)
+        node = next(iter(ws.all_nodes()))
+        ws.set_property(node, "FOO", "bar")  # mark dirty
+
+        # Sabotage dumps to return a truncated string.
+        import org_workspace.workspace as wsmod
+        monkeypatch.setattr(wsmod, "dumps", lambda root: "* Tiny\n")
+
+        with pytest.raises(CatastrophicShrinkError):
+            ws.save(f)
+
+        # And on disk, the original content must still be intact.
+        assert "Task 49" in f.read_text(), "Original file must be preserved on guard trip"
+
 
 class TestSetHeading:
     def test_set_heading(self, ws_two_files):

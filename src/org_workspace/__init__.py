@@ -34,9 +34,13 @@ from org_workspace.node_view import NodeView, StaleNodeError
 from org_workspace.plan import Plan, PlanProgress
 from org_workspace.prompt import get_prompt, get_role
 from org_workspace.query import Query
-from org_workspace.workspace import InvalidTransitionError, OrgWorkspace
+from org_workspace.workspace import (
+    CatastrophicShrinkError,
+    InvalidTransitionError,
+    OrgWorkspace,
+)
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 __all__ = [
     # Core types
@@ -61,6 +65,7 @@ __all__ = [
     # Workspace
     "OrgWorkspace",
     "InvalidTransitionError",
+    "CatastrophicShrinkError",
     # Concurrency
     "ConflictError",
     "FileLock",
