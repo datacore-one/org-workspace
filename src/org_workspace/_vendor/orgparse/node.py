@@ -838,6 +838,16 @@ class OrgBaseNode(Sequence):
             return line[: len(line) - len(line.lstrip(" "))]
         return ""
 
+    # Names of drawers that signal "you've left the PROPERTIES drawer"
+    # if we encounter them while still parsing PROPERTIES entries. Org-mode
+    # treats LOGBOOK (and the legacy CLOCK) as sibling drawers to
+    # PROPERTIES, never nested inside it. Some tooling (and humans) can
+    # produce files where LOGBOOK ends up inside PROPERTIES; without this
+    # rule the parser would treat `:LOGBOOK:` as an empty-valued property
+    # and then consume the LOGBOOK's `:END:` as the PROPERTIES close,
+    # corrupting the drawer state and any subsequent save.
+    _SIBLING_DRAWER_NAMES = frozenset({"LOGBOOK", "CLOCK"})
+
     def _sync_property_drawer_from_lines(self) -> None:
         self._property_drawer = None
         index = 0
@@ -858,6 +868,20 @@ class OrgBaseNode(Sequence):
                         self._update_line_item(end_index, end_line_item)
                         self._property_drawer = PropertyDrawer(start_line, end_line_item, entries, indent)
                         return
+                    # Sibling-drawer break: if we see :LOGBOOK: (or another
+                    # sibling drawer name) inside PROPERTIES, the file is
+                    # malformed. Close PROPERTIES implicitly here by
+                    # synthesizing a :END: line before this drawer name,
+                    # so the LOGBOOK can be parsed correctly as a sibling
+                    # by _sync_logbook_drawers_from_lines.
+                    stripped = end_line.strip()
+                    if stripped.startswith(":") and stripped.endswith(":") and len(stripped) > 2:
+                        drawer_name = stripped[1:-1].upper()
+                        if drawer_name in self._SIBLING_DRAWER_NAMES:
+                            synth_end = PropertyDrawerEndLine(f"{indent}:END:")
+                            self._insert_line_item(end_index, synth_end)
+                            self._property_drawer = PropertyDrawer(start_line, synth_end, entries, indent)
+                            return
                     entry = PropertyEntryLine.from_line(end_line)
                     if entry is not None:
                         self._update_line_item(end_index, entry)

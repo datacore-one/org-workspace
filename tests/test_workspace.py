@@ -359,6 +359,46 @@ class TestSetProperty:
         # The new property landed somewhere.
         assert "TEST_PROP" in result
 
+    def test_parser_normalizes_logbook_nested_in_properties(self, tmp_path):
+        """When :LOGBOOK: appears inside :PROPERTIES:, the parser must
+        treat it as the implicit close of the PROPERTIES drawer (LOGBOOK
+        is a sibling drawer in org-mode, never nested in PROPERTIES).
+
+        Verifies the 2026-05-18 fix at parse time, not just at save time:
+        properties before LOGBOOK are correctly indexed, LOGBOOK is
+        parsed as a separate drawer, and the file round-trips without
+        corruption.
+        """
+        from org_workspace._vendor.orgparse import loads, dumps
+
+        text = (
+            "*** DONE Malformed task\n"
+            ":PROPERTIES:\n"
+            ":CREATED: [2026-05-14 Thu]\n"
+            ":EFFORT: 2:30\n"
+            ":LOGBOOK:\n"
+            "CLOCK: [2026-05-14 Thu 09:11]--[2026-05-14 Thu 11:48] =>  2:37\n"
+            ":END:\n"
+            "Body line\n"
+        )
+        root = loads(text)
+        task = root.children[0]
+
+        # PROPERTIES must contain only CREATED + EFFORT, NOT LOGBOOK.
+        # (Pre-fix, `:LOGBOOK:` was consumed as a no-value property.)
+        assert "CREATED" in task.properties
+        assert "EFFORT" in task.properties
+        assert "LOGBOOK" not in task.properties, (
+            "LOGBOOK was incorrectly read as a property"
+        )
+
+        # The CLOCK entry must be recognized as a LOGBOOK clock.
+        assert len(task.clock) == 1, "CLOCK line must be parsed inside LOGBOOK"
+
+        # Round-trip via dumps must not lose the body line.
+        result = dumps(root)
+        assert "Body line" in result, "Body content lost in round-trip"
+
     def test_save_aborts_on_catastrophic_shrink(self, tmp_path, monkeypatch):
         """Defense-in-depth: if dumps() ever returns a result that would
         shrink the file by more than the safety threshold, save() must
