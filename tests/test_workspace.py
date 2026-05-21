@@ -205,6 +205,81 @@ class TestTransition:
         ws.transition(node, "EXECUTING")
         assert node.todo == "EXECUTING"
 
+    def test_transition_recurring_advances_scheduled(self, tmp_path):
+        """Recurring tasks (+Nd/+Nw/+Nm/+Ny repeaters) auto-advance on DONE.
+
+        Standard org-mode behaviour: when a task with a +Nw repeater is
+        flipped to DONE, SCHEDULED advances by the repeater interval and
+        state reverts to TODO so the task stays alive for its next cycle.
+
+        Bug surfaced 2026-05-21: prior to fix, transition() set state=DONE
+        and left SCHEDULED unchanged — recurring tasks effectively died
+        on first completion.
+        """
+        from org_workspace import OrgWorkspace
+        text = (
+            "#+SEQ_TODO: TODO(t) NEXT(n!) | DONE(d!)\n"
+            "* TODO Weekly review\n"
+            "SCHEDULED: <2026-05-23 Sat +1w>\n"
+            ":PROPERTIES:\n"
+            ":ID: org-recur-weekly\n"
+            ":END:\n"
+            "\n"
+            "* TODO Monthly report\n"
+            "SCHEDULED: <2026-05-20 Wed +1m>\n"
+            ":PROPERTIES:\n"
+            ":ID: org-recur-monthly\n"
+            ":END:\n"
+            "\n"
+            "* TODO Habit thing\n"
+            "SCHEDULED: <2026-05-10 Sun .+1w>\n"
+            ":PROPERTIES:\n"
+            ":ID: org-recur-habit\n"
+            ":END:\n"
+            "\n"
+            "* TODO Non-recurring\n"
+            "SCHEDULED: <2026-05-25 Mon>\n"
+            ":PROPERTIES:\n"
+            ":ID: org-once\n"
+            ":END:\n"
+        )
+        f = tmp_path / "recur.org"
+        f.write_text(text)
+        ws = OrgWorkspace()
+        ws.load(f)
+
+        # +1w: advance from original by 1 week
+        node = ws.find_by_id("org-recur-weekly")
+        ws.transition(node, "DONE")
+        node = ws.find_by_id("org-recur-weekly")
+        assert node.todo == "TODO", "Recurring task must revert state, not stay DONE"
+        assert "2026-05-30" in str(node.scheduled), f"+1w from 2026-05-23 should be 2026-05-30, got {node.scheduled}"
+        assert "+1w" in str(node.scheduled), "Repeater must be preserved on advanced date"
+        assert node.get_property("LAST_REPEAT"), "LAST_REPEAT must be stamped"
+
+        # +1m: month math
+        node = ws.find_by_id("org-recur-monthly")
+        ws.transition(node, "DONE")
+        node = ws.find_by_id("org-recur-monthly")
+        assert "2026-06-20" in str(node.scheduled), f"+1m from 2026-05-20 should be 2026-06-20, got {node.scheduled}"
+        assert "+1m" in str(node.scheduled)
+
+        # .+1w (habit): shift to today + 1w, ignoring old date
+        import datetime as _dt
+        node = ws.find_by_id("org-recur-habit")
+        ws.transition(node, "DONE")
+        node = ws.find_by_id("org-recur-habit")
+        expected = (_dt.date.today() + _dt.timedelta(weeks=1)).isoformat()
+        assert expected in str(node.scheduled), f".+1w should restart from today, got {node.scheduled}"
+        assert ".+1w" in str(node.scheduled), "Habit-style repeater must be preserved"
+
+        # Non-recurring: normal terminal behaviour
+        node = ws.find_by_id("org-once")
+        ws.transition(node, "DONE")
+        node = ws.find_by_id("org-once")
+        assert node.todo == "DONE", "Non-recurring should stay DONE"
+        assert node.closed is not None, "Non-recurring DONE should have CLOSED stamp"
+
 
 class TestSetProperty:
     def test_set_property(self, ws_two_files):

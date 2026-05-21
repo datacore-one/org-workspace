@@ -1333,7 +1333,19 @@ class OrgNode(OrgBaseNode):
         if value is None:
             return cls(None)
         if isinstance(value, OrgDate):
-            return cls(value.start, value.end, active=value.is_active())
+            # Preserve repeater + warning when re-wrapping. Without this,
+            # advancing a recurring task's SCHEDULED via a freshly-built
+            # OrgDate(...with repeater...) would silently drop the
+            # repeater on the setter side, so the next cycle would not
+            # recur. Bug surfaced 2026-05-21 when implementing automatic
+            # repeater advancement in OrgWorkspace.transition().
+            return cls(
+                value.start,
+                value.end,
+                active=value.is_active(),
+                repeater=getattr(value, "_repeater", None),
+                warning=getattr(value, "_warning", None),
+            )
         return cls(value)
 
     def _update_sdc_entry(self, label: str, date: OrgDate) -> None:

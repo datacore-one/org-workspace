@@ -247,6 +247,16 @@ class OrgWorkspace:
         INV-4: Only valid transitions allowed.
         Sets CLOSED timestamp when transitioning to terminal state.
         Sets COMPLETED_BY when agent is provided.
+
+        REPEATER HANDLING:
+        If transitioning to a terminal state AND SCHEDULED has an org-mode
+        repeater (``+Nd``, ``+Nw``, ``+Nm``, ``+Ny``, also ``++`` and ``.+``
+        prefixes), the task does NOT terminate. Instead:
+          1. Old CLOSED timestamp recorded (for audit)
+          2. SCHEDULED advances by the repeater interval
+          3. State reverts to the first non-terminal state (typically TODO)
+          4. The task stays alive for its next cycle
+        This matches Emacs org-mode behavior.
         """
         old_state = node.todo
         if old_state == new_state:
@@ -263,6 +273,20 @@ class OrgWorkspace:
             )
 
         raw_node = node.node  # checks staleness
+
+        # Check for repeater on terminal transition BEFORE setting state.
+        # If found, this is a recurring task — advance scheduled instead of
+        # marking permanently DONE.
+        if self._state_config.is_terminal(new_state) and raw_node.scheduled:
+            repeater = getattr(raw_node.scheduled, "_repeater", None)
+            if repeater is not None:
+                # repeater = (prefix, number, interval) e.g. ('+', 1, 'w')
+                self._advance_repeater(node, raw_node, new_state)
+                self._mark_dirty(node.path)
+                if agent:
+                    self.set_property(node, "COMPLETED_BY", agent)
+                return  # task stays alive — don't fall through to terminal handling
+
         raw_node.todo = new_state
         self._mark_dirty(node.path)
 
@@ -274,6 +298,119 @@ class OrgWorkspace:
         # Agent attribution
         if agent:
             self.set_property(node, "COMPLETED_BY", agent)
+
+    def _advance_repeater(
+        self,
+        node: NodeView,
+        raw_node: "OrgNode",
+        terminal_state: str,
+    ) -> None:
+        """Advance a recurring task's SCHEDULED by its repeater interval.
+
+        Called from transition() when the target state is terminal and the
+        node has a repeater. Mirrors Emacs org-mode behavior: state reverts
+        to the first non-terminal state, SCHEDULED advances, the old CLOSED
+        timestamp is recorded as an audit property.
+
+        Repeater prefixes:
+          ``+1w``  → advance from old SCHEDULED + 1 week
+          ``++1w`` → advance from old SCHEDULED + 1 week, repeatedly, until
+                     the result is in the future (handles overdue tasks)
+          ``.+1w`` → advance to TODAY + 1 week (habit-style; restart clock
+                     from completion time, not from previous SCHEDULED)
+
+        Intervals: d, w, m, y. Month/year handle short-month edge cases by
+        clamping day-of-month to the last valid day.
+        """
+        import datetime as _dt
+        from org_workspace._vendor.orgparse.date import OrgDate
+
+        sched = raw_node.scheduled
+        prefix, number, interval = sched._repeater
+        start = sched._start
+
+        # Normalise start to date (some scheduled values are datetime)
+        if isinstance(start, _dt.datetime):
+            anchor = start.date()
+            had_time = True
+        else:
+            anchor = start
+            had_time = False
+
+        today = _dt.date.today()
+
+        def _shift(d: _dt.date, n: int, unit: str) -> _dt.date:
+            if unit == "d":
+                return d + _dt.timedelta(days=n)
+            if unit == "w":
+                return d + _dt.timedelta(weeks=n)
+            if unit == "m":
+                # month math with clamp on short months
+                month = d.month + n
+                year = d.year + (month - 1) // 12
+                month = ((month - 1) % 12) + 1
+                # clamp day to last day of new month
+                import calendar as _cal
+                last = _cal.monthrange(year, month)[1]
+                return _dt.date(year, month, min(d.day, last))
+            if unit == "y":
+                import calendar as _cal
+                target_year = d.year + n
+                # Feb 29 → Feb 28 in non-leap
+                month = d.month
+                last = _cal.monthrange(target_year, month)[1]
+                return _dt.date(target_year, month, min(d.day, last))
+            raise ValueError(f"Unknown repeater interval: {unit!r}")
+
+        if prefix == ".+":
+            # Habit style — restart from today
+            new_date = _shift(today, number, interval)
+        elif prefix == "++":
+            # Advance from old date until in the future
+            new_date = anchor
+            while new_date <= today:
+                new_date = _shift(new_date, number, interval)
+        else:
+            # Plain '+' — advance by one interval from old date
+            new_date = _shift(anchor, number, interval)
+
+        # Preserve time if original had one
+        if had_time:
+            new_start = _dt.datetime.combine(new_date, start.time())
+        else:
+            new_start = new_date
+
+        # Build new OrgDate with the same repeater preserved
+        new_scheduled = OrgDate(
+            new_start,
+            repeater=(prefix, number, interval),
+            active=True,
+        )
+        raw_node.scheduled = new_scheduled
+
+        # Record when this cycle completed — useful for "is the habit
+        # actually firing?" audits. Stored as :LAST_REPEAT: property,
+        # overwriting rather than accumulating to avoid unbounded growth
+        # on long-running habits. If you want history, the org-mode
+        # convention is a LOGBOOK drawer with a state-change entry;
+        # we don't synthesise that yet (separate enhancement).
+        now = _dt.datetime.now()
+        props = dict(raw_node.properties)
+        props["LAST_REPEAT"] = now.strftime("[%Y-%m-%d %a %H:%M]")
+        raw_node.properties = props
+
+        # Revert to TODO if available; otherwise the first non-terminal
+        # state. (StateConfig.all_states may include WAITING before TODO
+        # depending on config, but the standard fresh-cycle state for
+        # a recurring task is TODO — "open again, ready to do".)
+        non_terminal = [s for s in self._state_config.all_states
+                        if not self._state_config.is_terminal(s)]
+        if "TODO" in non_terminal:
+            raw_node.todo = "TODO"
+        elif non_terminal:
+            raw_node.todo = non_terminal[0]
+        else:
+            raw_node.todo = terminal_state
 
     def set_property(self, node: NodeView, key: str, value: str) -> None:
         """Set a property on a node.
