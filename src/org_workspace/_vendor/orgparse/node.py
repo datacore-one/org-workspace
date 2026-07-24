@@ -179,8 +179,10 @@ class OrgEnv:
             self._todos = []
             self._dones = []
             self._todo_not_specified_in_comment = False
-        self._todos.extend(todos)
-        self._dones.extend(dones)
+        # Vendored patch (org-workspace 0.5.0): dedup — a file re-declaring a
+        # keyword already present in the seeded baseline must not double it.
+        self._todos.extend(k for k in todos if k not in self._todos)
+        self._dones.extend(k for k in dones if k not in self._dones)
 
     @property
     def todo_keys(self):

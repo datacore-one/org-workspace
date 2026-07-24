@@ -64,19 +64,25 @@ class TestStateConfig:
         assert not cfg.is_terminal("NEXT")
 
     def test_nightshift_states(self):
+        # DIP-0009 v1.1: nightshift() is an alias for the canonical union.
+        # EXECUTING is retired — WORKING is the in-progress keyword.
         cfg = StateConfig.nightshift()
         assert "QUEUED" in cfg.all_states
-        assert "EXECUTING" in cfg.all_states
+        assert "WORKING" in cfg.all_states
+        assert "EXECUTING" not in cfg.all_states
         assert "REVIEW" in cfg.all_states
         assert "FAILED" in cfg.all_states
 
     def test_nightshift_terminal(self):
+        # DIP-0009 v1.1: FAILED is done-CLASS (right of | in the header) but
+        # non-terminal for workflow — it awaits a human decision (retry/drop).
         cfg = StateConfig.nightshift()
         assert cfg.is_terminal("DONE")
-        assert cfg.is_terminal("FAILED")
         assert cfg.is_terminal("CANCELLED")
+        assert not cfg.is_terminal("FAILED")
         assert not cfg.is_terminal("QUEUED")
-        assert not cfg.is_terminal("EXECUTING")
+        assert not cfg.is_terminal("WORKING")
+        assert "FAILED" in (cfg.done_class or frozenset())
 
     def test_valid_transitions(self):
         cfg = StateConfig.default()

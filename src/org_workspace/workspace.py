@@ -147,7 +147,7 @@ class OrgWorkspace:
         # If reloading, remove old index entries and bump generation
         if path in self._files:
             self._id_index.remove_file(path)
-        root = load(str(path))
+        root = load(str(path), env=self._parse_env(path))
         # Dedup IDs before indexing — regenerate collisions
         changes = dedup_ids(root, existing_ids=self._id_index.all_ids())
         if changes:
@@ -158,6 +158,21 @@ class OrgWorkspace:
         self._generations[path] = self._generations.get(path, 0) + 1
         self._id_index.add_file(path, root)
 
+    def _parse_env(self, path: Path):
+        """Fresh orgparse env seeded with the canonical state vocabulary.
+
+        DIP-0009 v1.1: the workspace's StateConfig is the parsing BASELINE —
+        execution-overlay states are recognized even in files whose
+        #+SEQ_TODO header omits them. Per-file headers ADD keywords on top
+        (orgparse extends the env once keys were explicitly seeded), so
+        reading from the file always wins over the fallback.
+        """
+        from org_workspace._vendor.orgparse.node import OrgEnv
+
+        env = OrgEnv(filename=str(path))
+        env.add_todo_keys(*self.state_config.env_keys())
+        return env
+
     def reload(self, path: Path) -> None:
         """Reload a file from disk, invalidating existing NodeViews."""
         self.load(path)
@@ -167,7 +182,7 @@ class OrgWorkspace:
         path = Path(path).resolve()
         if path in self._files:
             self._id_index.remove_file(path)
-        root = load(str(path))
+        root = load(str(path), env=self._parse_env(path))
         changes = dedup_ids(root, existing_ids=self._id_index.all_ids())
         if changes:
             self._safe_write(path, dumps(root))

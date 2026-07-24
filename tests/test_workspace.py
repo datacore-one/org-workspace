@@ -196,14 +196,14 @@ class TestTransition:
         assert f1 not in ws.dirty_files()
 
     def test_transition_nightshift_states(self, tmp_path, nightshift_org):
-        """Nightshift state config allows QUEUED -> EXECUTING."""
+        """Canonical config allows QUEUED -> WORKING (EXECUTING retired, v1.1)."""
         f = tmp_path / "ns.org"
         shutil.copy(nightshift_org, f)
         ws = OrgWorkspace(roots=[f], state_config=StateConfig.nightshift())
         node = ws.find_by_id("ns-001")
         assert node.todo == "QUEUED"
-        ws.transition(node, "EXECUTING")
-        assert node.todo == "EXECUTING"
+        ws.transition(node, "WORKING")
+        assert node.todo == "WORKING"
 
     def test_transition_recurring_advances_scheduled(self, tmp_path):
         """Recurring tasks (+Nd/+Nw/+Nm/+Ny repeaters) auto-advance on DONE.

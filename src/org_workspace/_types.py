@@ -45,6 +45,11 @@ class StateConfig:
 
     sequences: dict[str, list[str]]
     terminal_states: frozenset[str]
+    # Keywords rendered right of `|` in #+SEQ_TODO (org "done" class). Distinct
+    # from terminal_states: FAILED is done-class for parsing/rendering but
+    # non-terminal for workflow — it can still transition to NEXT (retry).
+    # None → falls back to terminal_states (backward compatible).
+    done_class: frozenset[str] | None = None
 
     @property
     def all_states(self) -> frozenset[str]:
@@ -80,26 +85,50 @@ class StateConfig:
         """Check if a transition is valid."""
         return to_state in self.valid_transitions(from_state)
 
+    def env_keys(self) -> tuple[list[str], list[str]]:
+        """(todo_keys, done_keys) for seeding the orgparse environment.
+
+        done_keys mirror the right-of-`|` header class; everything else is
+        todo-class. Order follows the declared sequences.
+        """
+        dones_set = self.done_class if self.done_class is not None else self.terminal_states
+        todos: list[str] = []
+        dones: list[str] = []
+        for seq in self.sequences.values():
+            for state in seq:
+                target = dones if state in dones_set else todos
+                if state not in target:
+                    target.append(state)
+        return todos, dones
+
     @classmethod
     def default(cls) -> StateConfig:
-        """Standard DIP-0009 GTD state configuration."""
+        """Canonical DIP-0009 v1.1 vocabulary (2026-07-25).
+
+        One union set: human flow states plus the execution overlay
+        (QUEUED/WORKING/REVIEW/FAILED) that executors borrow while holding a
+        task. Loaded workspaces seed the parser with this set as a baseline,
+        so overlay states are recognized even in files whose #+SEQ_TODO
+        header omits them; per-file headers add keywords on top.
+        """
         return cls(
             sequences={
-                "gtd": ["TODO", "NEXT", "WAITING", "DEFERRED", "DONE", "CANCELLED"],
+                "gtd": ["TODO", "NEXT", "WAITING", "DEFERRED", "QUEUED",
+                        "WORKING", "REVIEW", "DONE", "FAILED", "CANCELLED"],
             },
             terminal_states=frozenset({"DONE", "CANCELLED"}),
+            done_class=frozenset({"DONE", "FAILED", "CANCELLED"}),
         )
 
     @classmethod
     def nightshift(cls) -> StateConfig:
-        """Nightshift AI execution state configuration."""
-        return cls(
-            sequences={
-                "gtd": ["TODO", "NEXT", "WAITING", "DEFERRED", "DONE", "CANCELLED"],
-                "nightshift": ["QUEUED", "EXECUTING", "REVIEW", "DONE", "FAILED"],
-            },
-            terminal_states=frozenset({"DONE", "CANCELLED", "FAILED"}),
-        )
+        """Deprecated alias for :meth:`default`.
+
+        DIP-0009 v1.1 merged the nightshift states into the canonical
+        vocabulary (EXECUTING retired — WORKING is canonical; FAILED is
+        non-terminal: it awaits a human decision and may requeue to NEXT).
+        """
+        return cls.default()
 
 
 @dataclass(frozen=True)
