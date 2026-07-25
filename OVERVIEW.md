@@ -87,6 +87,16 @@ All four launch bugs share root cause: **text-append-and-reload needs precise in
 3. **stale() false positives** on dateless tasks → fixed by requiring resolvable date
 4. **archive drops hierarchy** → fixed with `_ensure_archive_hierarchy()`
 
+### State Vocabulary: Seeded Baseline + File-Additive (v0.5.0)
+
+Commit `07961bd` (2026-07-25) made the org-workspace parser the single canonical source for DIP-0009 v1.1 task-state vocabulary. Previously the vocabulary was declared independently in four places (DIP-0009 spec, parser code, per-file `#+SEQ_TODO:` headers, query tooling) with no mechanism to catch drift between them.
+
+**Design**: The parser environment is seeded with the canonical DIP-0009 v1.1 vocabulary as a baseline. Per-file `#+SEQ_TODO:` declarations then ADD to that seeded set — they never restrict or replace it.
+
+**Tradeoff (deliberate)**: This departs from strict org-mode semantics, where a file's SEQ_TODO header is normally authoritative/exhaustive for that file. The seeded-baseline + additive approach is defensive: a writer's task state is never silently swallowed or misparsed just because one file's header didn't declare that keyword. Treat additive-not-restrictive parsing in `workspace.py`/`_types.py` as intentional, not a bug.
+
+Touched: `pyproject.toml`, `src/org_workspace/_types.py`, `src/org_workspace/_vendor/orgparse/node.py`, `src/org_workspace/workspace.py`, `tests/test_state_vocabulary.py`, `tests/test_types.py`, `tests/test_workspace.py`.
+
 ## Real-World Testing Results
 
 Against 193KB next_actions.org (367 nodes):
