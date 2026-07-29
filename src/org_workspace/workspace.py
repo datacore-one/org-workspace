@@ -139,20 +139,22 @@ class OrgWorkspace:
     def load(self, path: Path) -> None:
         """Load or reload an org file into the workspace.
 
-        Automatically deduplicates IDs: if two nodes in the file share
-        an ID (or collide with an already-indexed ID), the later node
-        gets a regenerated unique ID and the file is saved to disk.
+        Automatically deduplicates IDs in memory: if two nodes in the file
+        share an ID (or collide with an already-indexed ID), the later node
+        gets a regenerated unique ID in the loaded tree. The file on disk is
+        NOT touched — loading is read-only. (Write-on-load dirtied every repo
+        whose org files were merely queried, which broke git syncs mid-flight
+        and stranded work in stashes — 2026-07-29 post-mortem.) Regenerated
+        IDs persist only through an explicit write path: ``save()`` after an
+        edit, or the adapter's ``ensure-ids`` command.
         """
         path = Path(path).resolve()
         # If reloading, remove old index entries and bump generation
         if path in self._files:
             self._id_index.remove_file(path)
         root = load(str(path), env=self._parse_env(path))
-        # Dedup IDs before indexing — regenerate collisions
-        changes = dedup_ids(root, existing_ids=self._id_index.all_ids())
-        if changes:
-            self._safe_write(path, dumps(root))
-            self._dirty.discard(path)  # just written, not dirty
+        # Dedup IDs before indexing — regenerate collisions (in memory only)
+        dedup_ids(root, existing_ids=self._id_index.all_ids())
         self._files[path] = root
         self._dirty.discard(path)
         self._generations[path] = self._generations.get(path, 0) + 1
@@ -178,14 +180,15 @@ class OrgWorkspace:
         self.load(path)
 
     def _reload_preserving_dirty(self, path: Path) -> None:
-        """Reload a file without clearing its dirty status."""
+        """Reload a file without clearing its dirty status.
+
+        Like ``load()``, dedup is in-memory only — reloading never writes.
+        """
         path = Path(path).resolve()
         if path in self._files:
             self._id_index.remove_file(path)
         root = load(str(path), env=self._parse_env(path))
-        changes = dedup_ids(root, existing_ids=self._id_index.all_ids())
-        if changes:
-            self._safe_write(path, dumps(root))
+        dedup_ids(root, existing_ids=self._id_index.all_ids())
         self._files[path] = root
         self._generations[path] = self._generations.get(path, 0) + 1
         self._id_index.add_file(path, root)

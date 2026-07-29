@@ -812,13 +812,21 @@ class TestDuplicateIdDedup:
         ids = {n.id() for n in nodes}
         assert len(ids) == 2
 
-    def test_dedup_persisted_to_disk(self, tmp_path):
+    def test_dedup_not_persisted_to_disk(self, tmp_path):
+        """Loading is read-only — dedup happens in memory, never on disk.
+
+        Write-on-load dirtied every git repo whose org files were merely
+        queried, breaking syncs mid-flight (2026-07-29 post-mortem).
+        """
         f = tmp_path / "dupes.org"
-        f.write_text(
+        original = (
             "* TODO Task A\n  :PROPERTIES:\n  :ID: dup\n  :END:\n"
             "* TODO Task B\n  :PROPERTIES:\n  :ID: dup\n  :END:\n"
         )
-        OrgWorkspace(roots=[f])
-        # File should have been rewritten with unique IDs
-        content = f.read_text()
-        assert content.count(":ID: dup") == 1  # only first kept original
+        f.write_text(original)
+        ws = OrgWorkspace(roots=[f])
+        # In memory: two distinct IDs
+        ids = {n.id() for n in ws.all_nodes()}
+        assert len(ids) == 2
+        # On disk: untouched
+        assert f.read_text() == original
