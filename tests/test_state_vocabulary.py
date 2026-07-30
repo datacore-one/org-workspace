@@ -12,8 +12,6 @@ node.todo came back None; writers then stacked keywords: "NEXT WORKING").
 """
 from pathlib import Path
 
-import pytest
-
 from org_workspace import OrgWorkspace, Query
 from org_workspace._types import StateConfig
 

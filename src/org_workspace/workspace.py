@@ -11,12 +11,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator
 
+from org_workspace._compat import dumps, get_multiline_property, set_multiline_property
+from org_workspace._types import StateConfig
 from org_workspace._vendor.orgparse import dumps as _orgparse_dumps
 from org_workspace._vendor.orgparse import load
 from org_workspace._vendor.orgparse.node import OrgNode, OrgRootNode
-
-from org_workspace._compat import dumps, get_multiline_property, set_multiline_property
-from org_workspace._types import StateConfig
 from org_workspace.identifiers import IdIndex, dedup_ids, generate_id, heading_hash
 from org_workspace.node_view import NodeView
 
@@ -341,6 +340,7 @@ class OrgWorkspace:
         clamping day-of-month to the last valid day.
         """
         import datetime as _dt
+
         from org_workspace._vendor.orgparse.date import OrgDate
 
         sched = raw_node.scheduled

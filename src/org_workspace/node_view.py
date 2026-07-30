@@ -19,9 +19,8 @@ from org_workspace._compat import get_multiline_property
 from org_workspace._types import ChecklistItem, parse_checklists
 
 if TYPE_CHECKING:
-    from org_workspace._vendor.orgparse.node import OrgNode
-
     from org_workspace._types import StateConfig
+    from org_workspace._vendor.orgparse.node import OrgNode
 
 
 class StaleNodeError(Exception):

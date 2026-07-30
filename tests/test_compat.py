@@ -1,8 +1,7 @@
 """Tests for _compat.py — orgparse compatibility layer."""
 
-from org_workspace._vendor.orgparse import load, loads
-
 from org_workspace._compat import dumps, get_multiline_property, set_multiline_property
+from org_workspace._vendor.orgparse import load, loads
 
 
 class TestCompatAssertions:

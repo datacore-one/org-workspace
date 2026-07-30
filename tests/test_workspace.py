@@ -5,10 +5,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 import pytest
-from org_workspace._vendor.orgparse import load
 
 from org_workspace._compat import dumps
 from org_workspace._types import StateConfig
+from org_workspace._vendor.orgparse import load
 from org_workspace.node_view import NodeView, StaleNodeError
 from org_workspace.workspace import InvalidTransitionError, OrgWorkspace
 
@@ -253,7 +253,9 @@ class TestTransition:
         ws.transition(node, "DONE")
         node = ws.find_by_id("org-recur-weekly")
         assert node.todo == "TODO", "Recurring task must revert state, not stay DONE"
-        assert "2026-05-30" in str(node.scheduled), f"+1w from 2026-05-23 should be 2026-05-30, got {node.scheduled}"
+        assert "2026-05-30" in str(node.scheduled), (
+            f"+1w from 2026-05-23 should be 2026-05-30, got {node.scheduled}"
+        )
         assert "+1w" in str(node.scheduled), "Repeater must be preserved on advanced date"
         assert node.get_property("LAST_REPEAT"), "LAST_REPEAT must be stamped"
 
@@ -261,7 +263,9 @@ class TestTransition:
         node = ws.find_by_id("org-recur-monthly")
         ws.transition(node, "DONE")
         node = ws.find_by_id("org-recur-monthly")
-        assert "2026-06-20" in str(node.scheduled), f"+1m from 2026-05-20 should be 2026-06-20, got {node.scheduled}"
+        assert "2026-06-20" in str(node.scheduled), (
+            f"+1m from 2026-05-20 should be 2026-06-20, got {node.scheduled}"
+        )
         assert "+1m" in str(node.scheduled)
 
         # .+1w (habit): shift to today + 1w, ignoring old date
@@ -270,7 +274,9 @@ class TestTransition:
         ws.transition(node, "DONE")
         node = ws.find_by_id("org-recur-habit")
         expected = (_dt.date.today() + _dt.timedelta(weeks=1)).isoformat()
-        assert expected in str(node.scheduled), f".+1w should restart from today, got {node.scheduled}"
+        assert expected in str(node.scheduled), (
+            f".+1w should restart from today, got {node.scheduled}"
+        )
         assert ".+1w" in str(node.scheduled), "Habit-style repeater must be preserved"
 
         # Non-recurring: normal terminal behaviour
@@ -444,7 +450,7 @@ class TestSetProperty:
         parsed as a separate drawer, and the file round-trips without
         corruption.
         """
-        from org_workspace._vendor.orgparse import loads, dumps
+        from org_workspace._vendor.orgparse import dumps, loads
 
         text = (
             "*** DONE Malformed task\n"

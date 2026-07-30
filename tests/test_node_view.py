@@ -4,8 +4,8 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from org_workspace._vendor.orgparse import load, loads
 
+from org_workspace._vendor.orgparse import load, loads
 from org_workspace.node_view import NodeView, StaleNodeError
 
 
