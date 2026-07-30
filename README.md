@@ -1,5 +1,7 @@
 # org-workspace
 
+[![CI](https://github.com/datacore-one/org-workspace/actions/workflows/ci.yml/badge.svg)](https://github.com/datacore-one/org-workspace/actions/workflows/ci.yml)
+
 Python library that makes org-mode files first-class citizens for AI agent workflows.
 
 Built on a vendored fork of [orgparse](https://github.com/karlicoss/orgparse) with write support (PR #77), org-workspace adds multi-file workspace management, structured mutations, concurrency primitives, and query capabilities designed for autonomous AI agents.
