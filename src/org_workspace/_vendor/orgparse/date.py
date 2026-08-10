@@ -288,6 +288,14 @@ class OrgDate:
         return '{}({})'.format(args[0], ', '.join(map(repr, args[1:])))
 
     def __str__(self) -> str:
+        # An absent SCHEDULED/DEADLINE yields the empty OrgDate sentinel
+        # (OrgDate(None)), which is correctly falsy but used to raise
+        # AttributeError here. __str__ must never raise: f"{node.scheduled}"
+        # is the natural way to render a date and crashed on every node
+        # without one.
+        if self.start is None:
+            return ""
+
         fence = ("<", ">") if self.is_active() else ("[", "]")
 
         start = date_time_format(self.start)
