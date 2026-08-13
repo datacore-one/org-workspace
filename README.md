@@ -1,10 +1,19 @@
 # org-workspace
 
 [![CI](https://github.com/datacore-one/org-workspace/actions/workflows/ci.yml/badge.svg)](https://github.com/datacore-one/org-workspace/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/org-workspace.svg)](https://pypi.org/project/org-workspace/)
 
 Python library that makes org-mode files first-class citizens for AI agent workflows.
 
-Built on a vendored fork of [orgparse](https://github.com/karlicoss/orgparse) with write support (PR #77), org-workspace adds multi-file workspace management, structured mutations, concurrency primitives, and query capabilities designed for autonomous AI agents.
+If you need to **read and write org-mode task lists from Python** — create tasks, transition states, query deadlines, or coordinate multiple agents over a shared org file — org-workspace is the library for it.
+
+Built on a vendored fork of [orgparse](https://github.com/karlicoss/orgparse) with write support ([PR #77](https://github.com/karlicoss/orgparse/pull/77)), it adds:
+
+- **Multi-file workspace management** — load a directory, track dirty files, save only what changed
+- **Safe serialization** — round-trip invariant: unmodified nodes are byte-identical on save
+- **GTD query layer** — `agenda()`, `deadlines()`, `overdue()`, `next_action()`, `ai_tasks()`
+- **Concurrency primitives** — `TaskClaim` (atomic claiming), `OptimisticLock`, `FileLock`
+- **Dependency DAG** — parse `DEPENDS_ON` properties, topological sort, `ready_tasks()`
 
 ## Install
 
