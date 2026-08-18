@@ -28,7 +28,7 @@ from pathlib import Path
 from org_workspace import OrgWorkspace, Query
 
 # Load workspace
-ws = OrgWorkspace(roots=[Path("~/org")])
+ws = OrgWorkspace(roots=[Path.home() / "org"])
 
 # Query tasks
 q = Query(ws)
@@ -38,7 +38,7 @@ deadlines = q.deadlines(days=14)
 
 # Create a task
 task = ws.create_node(
-    file=Path("~/org/inbox.org"),
+    file=Path.home() / "org" / "inbox.org",
     heading="Research org-mode parsing",
     state="TODO",
     tags=["AI", "research"],
