@@ -28,7 +28,7 @@ jobs:
       - name: Build package
         run: python -m build
 
-      - name: Store distribution packages
+      - name: Store distribution packackages
         uses: actions/upload-artifact@v4
         with:
           name: python-package-distributions
@@ -54,3 +54,5 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
