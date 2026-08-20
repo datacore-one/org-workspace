@@ -1,10 +1,10 @@
 """Tests for query.py — agenda, deadlines, cross-file search."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
-from org_workspace.query import Query
+from org_workspace.query import Query, _parse_org_date_string, _to_date
 from org_workspace.workspace import OrgWorkspace
 
 
@@ -193,3 +193,138 @@ class TestAiTasks:
         results = query.ai_tasks()
         ids = {n.id() for n in results}
         assert "q-003" in ids
+
+
+class TestByTag:
+    def test_finds_by_tag(self, query):
+        results = query.by_tag("backend")
+        ids = {n.id() for n in results}
+        assert "q-003" in ids
+
+    def test_by_tag_no_match(self, query):
+        results = query.by_tag("nonexistent_tag_xyz")
+        assert results == []
+
+
+class TestNextActionEdgeCases:
+    def test_returns_none_when_no_candidates(self, tmp_path):
+        """next_action returns None when workspace has no TODO/NEXT tasks."""
+        content = "* DONE All done\n  :PROPERTIES:\n  :ID: edge-001\n  :END:\n"
+        f = tmp_path / "done.org"
+        f.write_text(content)
+        ws = OrgWorkspace(roots=[f])
+        result = Query(ws).next_action()
+        assert result is None
+
+    def test_skips_claimed_todo(self, tmp_path):
+        """next_action skips TODO tasks with CLAIMED_BY property."""
+        content = (
+            "* TODO Claimed task\n"
+            "  :PROPERTIES:\n"
+            "  :ID: edge-002\n"
+            "  :CLAIMED_BY: some-agent\n"
+            "  :END:\n"
+        )
+        f = tmp_path / "claimed.org"
+        f.write_text(content)
+        ws = OrgWorkspace(roots=[f])
+        result = Query(ws).next_action()
+        assert result is None
+
+
+class TestStaleEdgeCases:
+    def test_old_deadline_is_stale(self, tmp_path):
+        """A task with an old deadline (no recent activity) is flagged stale."""
+        old_date = date.today() - timedelta(days=60)
+        content = (
+            f"* TODO Old deadline task\n"
+            f"  DEADLINE: <{old_date.strftime('%Y-%m-%d')} {old_date.strftime('%a')}>\n"
+            f"  :PROPERTIES:\n"
+            f"  :ID: stale-001\n"
+            f"  :END:\n"
+        )
+        f = tmp_path / "old.org"
+        f.write_text(content)
+        ws = OrgWorkspace(roots=[f])
+        results = Query(ws).stale(days=30)
+        ids = {n.id() for n in results}
+        assert "stale-001" in ids
+
+    def test_old_created_property_is_stale(self, tmp_path):
+        """A task with no date signals but an old CREATED property is flagged stale."""
+        old_date = date.today() - timedelta(days=60)
+        content = (
+            f"* TODO Old created task\n"
+            f"  :PROPERTIES:\n"
+            f"  :ID: stale-002\n"
+            f"  :CREATED: [{old_date.strftime('%Y-%m-%d')} {old_date.strftime('%a')}]\n"
+            f"  :END:\n"
+        )
+        f = tmp_path / "created.org"
+        f.write_text(content)
+        ws = OrgWorkspace(roots=[f])
+        results = Query(ws).stale(days=30)
+        ids = {n.id() for n in results}
+        assert "stale-002" in ids
+
+    def test_recent_created_property_not_stale(self, tmp_path):
+        """A task with a recent CREATED property is not stale."""
+        recent_date = date.today() - timedelta(days=5)
+        content = (
+            f"* TODO Recent created task\n"
+            f"  :PROPERTIES:\n"
+            f"  :ID: stale-003\n"
+            f"  :CREATED: [{recent_date.strftime('%Y-%m-%d')} {recent_date.strftime('%a')}]\n"
+            f"  :END:\n"
+        )
+        f = tmp_path / "recent.org"
+        f.write_text(content)
+        ws = OrgWorkspace(roots=[f])
+        results = Query(ws).stale(days=30)
+        ids = {n.id() for n in results}
+        assert "stale-003" not in ids
+
+    def test_non_todo_heading_not_stale(self, tmp_path):
+        """Regular headings without a TODO keyword are not flagged stale."""
+        content = "* Section heading without state\n** Sub-section\n"
+        f = tmp_path / "plain.org"
+        f.write_text(content)
+        ws = OrgWorkspace(roots=[f])
+        results = Query(ws).stale(days=30)
+        headings = [n.heading for n in results]
+        assert "Section heading without state" not in headings
+
+
+class TestToDate:
+    def test_none_returns_none(self):
+        assert _to_date(None) is None
+
+    def test_datetime_returns_date(self):
+        dt = datetime(2025, 6, 15, 10, 30)
+        assert _to_date(dt) == date(2025, 6, 15)
+
+    def test_date_returns_date(self):
+        d = date(2025, 6, 15)
+        assert _to_date(d) == d
+
+    def test_unknown_type_returns_none(self):
+        assert _to_date("not-a-date") is None
+
+
+class TestParseOrgDateString:
+    def test_empty_string_returns_none(self):
+        assert _parse_org_date_string("") is None
+
+    def test_valid_org_timestamp(self):
+        result = _parse_org_date_string("[2025-06-15 Sun]")
+        assert result == date(2025, 6, 15)
+
+    def test_angle_bracket_timestamp(self):
+        result = _parse_org_date_string("<2025-06-15 Sun>")
+        assert result == date(2025, 6, 15)
+
+    def test_no_date_pattern_returns_none(self):
+        assert _parse_org_date_string("no date here") is None
+
+    def test_invalid_date_returns_none(self):
+        assert _parse_org_date_string("[2025-13-01 Mon]") is None

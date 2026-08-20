@@ -230,3 +230,33 @@ class TestRepr:
         assert "TODO" in r
         assert "My task" in r
         assert "abc" in r
+
+
+class TestAdditionalProperties:
+    def test_shallow_tags(self):
+        view = _make_view("* TODO Task :tag1:tag2:\n")
+        tags = view.shallow_tags
+        assert isinstance(tags, set)
+
+    def test_clock_property(self):
+        view = _make_view("* TODO Task\n")
+        clock = view.clock
+        assert isinstance(clock, list)
+
+    def test_eq_with_non_nodeview(self):
+        view = _make_view("* TODO Task\n  :PROPERTIES:\n  :ID: abc\n  :END:\n")
+        assert view.__eq__("not_a_nodeview") is NotImplemented
+
+    def test_hash_without_id(self):
+        root = loads("* TODO Task without ID\n")
+        node = root.children[0]
+        view = NodeView(node, Path("test.org"))
+        h = hash(view)
+        assert isinstance(h, int)
+
+    def test_eq_no_id_different_nodes(self):
+        root1 = loads("* TODO Task without ID\n")
+        root2 = loads("* TODO Task without ID\n")
+        v1 = NodeView(root1.children[0], Path("test.org"))
+        v2 = NodeView(root2.children[0], Path("test.org"))
+        assert v1 != v2
