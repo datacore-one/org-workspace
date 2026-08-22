@@ -19,7 +19,7 @@ pytest                          # run all tests
 pytest --cov=org_workspace      # with coverage report
 ```
 
-The CI enforces 79% coverage — PRs that drop below this will fail the build.
+The CI enforces 80% coverage — PRs that drop below this will fail the build.
 
 ## Code style
 
