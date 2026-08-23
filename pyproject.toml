@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "org-workspace"
-version = "0.5.2"
-description = "Python library making org-mode files first-class citizens for AI agent workflows"
+version = "0.5.3"
+description = "Python library for reading and writing org-mode files in AI agent workflows — safe multi-file mutations, GTD queries, and concurrency primitives."
 readme = "README.md"
 license = "BSD-2-Clause"
 requires-python = ">=3.10"
