@@ -76,6 +76,7 @@ That's it. You've loaded a workspace, queried it, created a task, and saved safe
 ### Claim a task before executing
 
 ```python
+from pathlib import Path
 from org_workspace import OrgWorkspace, Query
 from org_workspace.concurrency import TaskClaim
 
