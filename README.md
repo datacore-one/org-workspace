@@ -52,6 +52,11 @@ ws.transition(task, "DONE", agent="my-agent")
 ws.save()
 ```
 
+## Documentation
+
+- [Quick start guide](docs/quick-start.md) — from install to first AI-readable task list in five minutes
+- [Comparison: org-workspace vs orgparse vs organice](docs/comparison.md) — factual feature comparison for developers choosing a library
+
 ## Features
 
 ### Workspace management
