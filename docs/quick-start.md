@@ -137,4 +137,5 @@ ws = OrgWorkspace(roots=[...], state_config=config)
 
 - [GitHub](https://github.com/datacore-one/org-workspace) — source, issues, discussions
 - `pip install org-workspace` then `python -c "from org_workspace import OrgWorkspace; help(OrgWorkspace)"`
+- [org-workspace vs orgparse vs organice](comparison.md) — when to pick this library
 - Issues and feature requests welcome on GitHub
