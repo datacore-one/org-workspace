@@ -683,9 +683,12 @@ class OrgWorkspace:
             raise ValueError("Cannot refile root node")
         parent.children = [c for c in parent.children if c is not raw_node]
 
-        # Save source to disk
+        # Save source to disk. Pass the planned removal size so the shrink
+        # guard does not fire when a large node with many |-continuation
+        # property lines is legitimately extracted.
         source_content = dumps(self._files[source_file])
-        self._safe_write(source_file, source_content)
+        removed_lines = subtree_text.count("\n")
+        self._safe_write(source_file, source_content, expected_delta=removed_lines)
 
         # Insert into target at correct position
         target_content = dumps(self._files[target_file])
@@ -752,14 +755,23 @@ class OrgWorkspace:
     # of next_actions.org disappeared between read and write.
     _MAX_SHRINK_FRACTION = 0.25
 
-    def _safe_write(self, path: Path, content: str) -> None:
+    def _safe_write(self, path: Path, content: str, *, expected_delta: int = 0) -> None:
         """Write ``content`` to ``path`` with a catastrophic-shrink guard.
 
         Compares the new content's line count against the file currently
         on disk. If the new content would shrink the file by more than
-        ``_MAX_SHRINK_FRACTION``, raises ``CatastrophicShrinkError`` and
-        leaves the on-disk file untouched. Otherwise writes atomically
-        via a temp file in the same directory + rename.
+        ``_MAX_SHRINK_FRACTION`` beyond what was planned, raises
+        ``CatastrophicShrinkError`` and leaves the on-disk file untouched.
+        Otherwise writes atomically via a temp file in the same directory +
+        rename.
+
+        ``expected_delta`` is the number of lines the caller intentionally
+        removed from the file (e.g. a subtree extracted during refile). The
+        guard computes the floor against ``old_lines - expected_delta`` so
+        that a planned removal of a large node with many ``|``-continuation
+        lines does not trigger a false positive. Unintentional additional
+        shrinkage beyond ``_MAX_SHRINK_FRACTION`` of the expected remainder
+        still raises.
 
         This is the safety net for parser/serializer regressions. The
         property setter's _resolve_drawer_* helpers cover the known
@@ -779,13 +791,19 @@ class OrgWorkspace:
             # An old_lines threshold of 20 prevents false positives on
             # tiny files (e.g. a 3-line test file going to 1 line).
             if old_lines > 20:
-                allowed_floor = int(old_lines * (1.0 - self._MAX_SHRINK_FRACTION))
+                # Floor is based on the expected remaining content after the
+                # planned removal, not on the original size. This allows refile
+                # of large entries (including those with many |-continuation
+                # property lines) without tripping the guard.
+                expected_remaining = max(0, old_lines - expected_delta)
+                allowed_floor = int(expected_remaining * (1.0 - self._MAX_SHRINK_FRACTION))
                 if new_lines < allowed_floor:
                     raise CatastrophicShrinkError(
                         f"Refusing to write {path}: serialized output would "
                         f"shrink the file from {old_lines} → {new_lines} lines "
                         f"({(old_lines - new_lines) / old_lines * 100:.1f}% loss). "
-                        f"Limit is {self._MAX_SHRINK_FRACTION * 100:.0f}%. "
+                        f"Expected ~{expected_remaining} lines after planned removal "
+                        f"of {expected_delta} lines; floor is {allowed_floor}. "
                         f"This usually means a parser/serializer bug. The "
                         f"existing on-disk file has been left untouched."
                     )

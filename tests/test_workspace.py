@@ -705,6 +705,175 @@ class TestRefile:
         with pytest.raises(ValueError, match="not loaded"):
             ws.refile(node, Path("/fake.org"))
 
+    def test_refile_node_with_multiline_continuation_properties(self, tmp_path):
+        """Regression: refile must not raise CatastrophicShrinkError when a node
+        carries large |'-continuation property drawers (BOOTSTRAP/CONTEXT).
+
+        The shrink guard compares line counts. A node with N continuation lines
+        legitimately removes those N lines from the source file. The guard must
+        account for the planned removal so it does not false-positive on what is a
+        correct serialization — only on additional unexpected loss beyond the
+        expected remainder.
+
+        Verified to fail before the expected_delta fix in _safe_write / refile().
+        """
+        # Source file: one large task (15 continuation lines → big shrink on remove)
+        # plus a few small siblings that together make it < 75% of the total.
+        # Without the fix the guard fires because removing the large task shrinks
+        # the source by > 25% of its total line count.
+        source_text = (
+            "* TODO Projects\n"
+            "** TODO Task with big BOOTSTRAP        :AI:\n"
+            "   :PROPERTIES:\n"
+            "   :ID: ml-refile-001\n"
+            "   :BOOTSTRAP: |\n"
+            + "".join(
+                f"   :   Bootstrap line {i}\n" for i in range(1, 16)
+            )
+            + "   :END:\n"
+            "   Body text.\n"
+            "** TODO Another task\n"
+            "   :PROPERTIES:\n"
+            "   :ID: ml-refile-002\n"
+            "   :END:\n"
+            "** TODO Third task\n"
+            "   :PROPERTIES:\n"
+            "   :ID: ml-refile-003\n"
+            "   :END:\n"
+            "** TODO Fourth task\n"
+            "   :PROPERTIES:\n"
+            "   :ID: ml-refile-004\n"
+            "   :END:\n"
+        )
+        target_text = (
+            "* TODO Target area\n"
+            "  :PROPERTIES:\n"
+            "  :ID: ml-target-parent\n"
+            "  :END:\n"
+        )
+
+        src = tmp_path / "source.org"
+        dst = tmp_path / "target.org"
+        src.write_text(source_text)
+        dst.write_text(target_text)
+
+        ws = OrgWorkspace(roots=[src, dst])
+        node = ws.find_by_id("ml-refile-001")
+        assert node is not None, "fixture node not found"
+
+        # Must not raise CatastrophicShrinkError
+        new_view = ws.refile(node, dst)
+        ws.save_all()
+
+        # Node is in the target with its ID intact
+        assert new_view.path == dst
+        assert new_view.heading == "Task with big BOOTSTRAP"
+        assert ws.find_by_id("ml-refile-001") is not None
+        assert ws.find_by_id("ml-refile-001").path == dst
+
+        # Source no longer contains the node
+        source_content = src.read_text()
+        assert "ml-refile-001" not in source_content
+        assert "Bootstrap line" not in source_content
+
+        # Target contains the node with all continuation lines intact
+        target_content = dst.read_text()
+        assert "ml-refile-001" in target_content
+        for i in range(1, 16):
+            assert f"Bootstrap line {i}" in target_content, (
+                f"Continuation line {i} lost after refile"
+            )
+
+    def test_refile_node_with_multiline_context_and_bootstrap(self, tmp_path):
+        """Regression: node with both CONTEXT and BOOTSTRAP multiline properties
+        refiled correctly — both property blocks preserved in the target.
+        """
+        source_text = (
+            "* TODO Work\n"
+            "** NEXT Ledger ingest frequency decision        :datacore:\n"
+            "   :PROPERTIES:\n"
+            "   :ID: ml-refile-ctx-001\n"
+            "   :CONTEXT: ledger_daily.sh runs once a day at 05:35 on winston.\n"
+            "   :BOOTSTRAP: |\n"
+            "   :   The asymmetry may be correct — ingest also runs shadow_check.\n"
+            "   :   Consider splitting so ingest runs hourly.\n"
+            "   :   RELATED: same latency that made app appear broken.\n"
+            "   :END:\n"
+            "   Body text.\n"
+            # Add filler to make source large enough that removal would trip old guard
+            + "".join(
+                f"** TODO Filler task {i}\n   :PROPERTIES:\n   :ID: filler-{i}\n   :END:\n"
+                for i in range(8)
+            )
+        )
+        target_text = (
+            "* TODO Next actions\n"
+            "  :PROPERTIES:\n"
+            "  :ID: target-na\n"
+            "  :END:\n"
+        )
+
+        src = tmp_path / "source.org"
+        dst = tmp_path / "target.org"
+        src.write_text(source_text)
+        dst.write_text(target_text)
+
+        ws = OrgWorkspace(roots=[src, dst])
+        node = ws.find_by_id("ml-refile-ctx-001")
+        assert node is not None
+
+        ws.refile(node, dst)
+        ws.save_all()
+
+        target_content = dst.read_text()
+        assert "ml-refile-ctx-001" in target_content
+        assert "ledger_daily.sh" in target_content
+        assert "The asymmetry may be correct" in target_content
+        assert "splitting so ingest runs hourly" in target_content
+        assert "same latency that made app appear broken" in target_content
+
+        assert "ml-refile-ctx-001" not in src.read_text()
+
+    def test_refile_shrink_guard_still_fires_on_serializer_bug(self, tmp_path, monkeypatch):
+        """The expected_delta fix must NOT suppress the guard for genuine regressions.
+
+        After the fix, the guard checks: new_lines >= (old_lines - delta) * 0.75.
+        If the serializer produces garbage unrelated to the planned removal,
+        CatastrophicShrinkError must still be raised.
+        """
+        from org_workspace.workspace import CatastrophicShrinkError
+
+        source_text = "\n".join(
+            f"* TODO Task {i}\n  :PROPERTIES:\n  :ID: guard-{i}\n  :END:"
+            for i in range(30)
+        ) + "\n"
+        src = tmp_path / "source.org"
+        dst = tmp_path / "target.org"
+        src.write_text(source_text)
+        dst.write_text("* TODO Target\n  :PROPERTIES:\n  :ID: target-guard\n  :END:\n")
+
+        ws = OrgWorkspace(roots=[src, dst])
+
+        # Sabotage the serializer to return a pathologically short string —
+        # simulating the 2026-05-16 / 2026-05-18 regression pattern.
+        import org_workspace.workspace as wsmod
+
+        real_dumps = wsmod.dumps
+
+        def broken_dumps(root):
+            result = real_dumps(root)
+            # Return only the first 5 lines — catastrophic truncation
+            return "\n".join(result.split("\n")[:5]) + "\n"
+
+        monkeypatch.setattr(wsmod, "dumps", broken_dumps)
+
+        node = ws.find_by_id("guard-0")
+        with pytest.raises(CatastrophicShrinkError):
+            ws.refile(node, dst)
+
+        # Source file on disk must still be intact
+        assert "guard-29" in src.read_text()
+
 
 class TestSave:
     def test_save_writes_to_disk(self, ws_two_files):
