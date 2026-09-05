@@ -717,8 +717,6 @@ class TestRefile:
 
         Verified to fail before the expected_delta fix in _safe_write / refile().
         """
-        from org_workspace.workspace import CatastrophicShrinkError
-
         # Source file: one large task (15 continuation lines → big shrink on remove)
         # plus a few small siblings that together make it < 75% of the total.
         # Without the fix the guard fires because removing the large task shrinks
@@ -824,7 +822,7 @@ class TestRefile:
         node = ws.find_by_id("ml-refile-ctx-001")
         assert node is not None
 
-        new_view = ws.refile(node, dst)
+        ws.refile(node, dst)
         ws.save_all()
 
         target_content = dst.read_text()
