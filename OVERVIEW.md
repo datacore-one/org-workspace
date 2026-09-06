@@ -3,7 +3,7 @@
 Python library for AI agent org-mode workflows. Wraps orgparse (with PR #77 write support) to provide workspace management, state machines, concurrency, plans-as-DAGs, structured logging, and archive operations.
 
 **Repository**: `github.com/datacore-one/org-workspace`
-**Version**: 0.5.3 (280 tests, 80% coverage)
+**Version**: 0.5.4 (283 tests, 80% coverage)
 **Python**: >= 3.10
 **Key dependency**: orgparse fork at `datacore-one/orgparse@pr-77`
 
@@ -105,3 +105,4 @@ Against 193KB next_actions.org (367 nodes):
 - 101/197 tasks missing `:CREATED:` → drove auto-CREATED on create_node
 - `OrgDate` wrapper is never None (check inner `.start` value)
 - Curly quotes (Unicode U+2019) preserved by orgparse — match exact characters
+
