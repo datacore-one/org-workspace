@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.6.0 (unreleased)
+## 0.6.1 (unreleased)
+
+### Fixed
+
+- `transition()` now advances a repeater on DEADLINE, not only on SCHEDULED.
+  Tasks with a `DEADLINE` cookie (e.g. habit trackers using nvim-orgmode)
+  no longer terminate on the first completion. Reported by @Amperture (#17).
+
+---
+
+## 0.6.0 (2026-09-23)
 
 ### Changed (breaking for default-config readers)
 
