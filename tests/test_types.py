@@ -64,25 +64,22 @@ class TestStateConfig:
         assert not cfg.is_terminal("NEXT")
 
     def test_nightshift_states(self):
-        # DIP-0009 v1.1: nightshift() is an alias for the canonical union.
-        # EXECUTING is retired — WORKING is the in-progress keyword.
+        # nightshift() is a deprecated alias for default(); DIP-0009 v2.0
+        # retired the overlay (QUEUED/WORKING/FAILED; EXECUTING earlier).
         cfg = StateConfig.nightshift()
-        assert "QUEUED" in cfg.all_states
-        assert "WORKING" in cfg.all_states
-        assert "EXECUTING" not in cfg.all_states
+        assert cfg == StateConfig.default()
+        for s in ("QUEUED", "WORKING", "FAILED", "EXECUTING"):
+            assert s not in cfg.all_states
         assert "REVIEW" in cfg.all_states
-        assert "FAILED" in cfg.all_states
 
     def test_nightshift_terminal(self):
-        # DIP-0009 v1.1: FAILED is done-CLASS (right of | in the header) but
-        # non-terminal for workflow — it awaits a human decision (retry/drop).
+        # DIP-0009 v2.0: DEFERRED is done-CLASS (right of | in the header) but
+        # non-terminal for workflow — it is closed but wakeable.
         cfg = StateConfig.nightshift()
         assert cfg.is_terminal("DONE")
         assert cfg.is_terminal("CANCELLED")
-        assert not cfg.is_terminal("FAILED")
-        assert not cfg.is_terminal("QUEUED")
-        assert not cfg.is_terminal("WORKING")
-        assert "FAILED" in (cfg.done_class or frozenset())
+        assert not cfg.is_terminal("DEFERRED")
+        assert "DEFERRED" in (cfg.done_class or frozenset())
 
     def test_valid_transitions(self):
         cfg = StateConfig.default()
@@ -156,3 +153,27 @@ class TestDependency:
         assert str(dep) == 'BLOCKS abc "Test"'
         dep2 = Dependency(dep_type="WAITING", free_text="some review")
         assert str(dep2) == 'WAITING "some review"'
+
+
+class TestDefaultIsDip0009V2:
+    """DIP-0009 v2.0 (owner decision G5, 2026-09-23): QUEUED/WORKING/FAILED are
+    retired, and DEFERRED is done-class (right of `|`) but not terminal."""
+
+    V2 = {"TODO", "NEXT", "WAITING", "REVIEW", "DONE", "DEFERRED", "CANCELLED"}
+
+    def test_default_holds_exactly_the_v2_states(self):
+        assert StateConfig.default().all_states == self.V2
+
+    def test_deferred_is_done_class_but_not_terminal(self):
+        cfg = StateConfig.default()
+        todos, dones = cfg.env_keys()
+        assert todos == ["TODO", "NEXT", "WAITING", "REVIEW"]
+        assert dones == ["DONE", "DEFERRED", "CANCELLED"]
+        assert not cfg.is_terminal("DEFERRED")
+        assert cfg.can_transition("DEFERRED", "TODO")
+
+    def test_retired_states_are_not_reachable(self):
+        cfg = StateConfig.default()
+        for s in ("QUEUED", "WORKING", "FAILED"):
+            assert not cfg.can_transition("NEXT", s)
+            assert not cfg.can_transition(s, "NEXT")

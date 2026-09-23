@@ -40,7 +40,7 @@ from org_workspace.workspace import (
     OrgWorkspace,
 )
 
-__version__ = "0.5.2"
+__version__ = "0.6.0"
 
 __all__ = [
     # Core types

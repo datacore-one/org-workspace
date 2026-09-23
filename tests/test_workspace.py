@@ -196,10 +196,20 @@ class TestTransition:
         assert f1 not in ws.dirty_files()
 
     def test_transition_nightshift_states(self, tmp_path, nightshift_org):
-        """Canonical config allows QUEUED -> WORKING (EXECUTING retired, v1.1)."""
+        """A caller-supplied legacy config still allows QUEUED -> WORKING.
+
+        DIP-0009 v2.0 retired these from the default; a reader of a legacy
+        overlay file passes its own StateConfig (as nightshift_parser does).
+        """
+        legacy = StateConfig(
+            sequences={"gtd": ["TODO", "NEXT", "WAITING", "QUEUED", "WORKING",
+                               "REVIEW", "DONE", "FAILED", "CANCELLED"]},
+            terminal_states=frozenset({"DONE", "CANCELLED"}),
+            done_class=frozenset({"DONE", "FAILED", "CANCELLED"}),
+        )
         f = tmp_path / "ns.org"
         shutil.copy(nightshift_org, f)
-        ws = OrgWorkspace(roots=[f], state_config=StateConfig.nightshift())
+        ws = OrgWorkspace(roots=[f], state_config=legacy)
         node = ws.find_by_id("ns-001")
         assert node.todo == "QUEUED"
         ws.transition(node, "WORKING")

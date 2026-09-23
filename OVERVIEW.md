@@ -3,7 +3,7 @@
 Python library for AI agent org-mode workflows. Wraps orgparse (with PR #77 write support) to provide workspace management, state machines, concurrency, plans-as-DAGs, structured logging, and archive operations.
 
 **Repository**: `github.com/datacore-one/org-workspace`
-**Version**: 0.5.4 (283 tests, 80% coverage)
+**Version**: 0.6.0
 **Python**: >= 3.10
 **Key dependency**: orgparse fork at `datacore-one/orgparse@pr-77`
 
@@ -96,6 +96,8 @@ Commit `07961bd` (2026-07-25) made the org-workspace parser the single canonical
 **Tradeoff (deliberate)**: This departs from strict org-mode semantics, where a file's SEQ_TODO header is normally authoritative/exhaustive for that file. The seeded-baseline + additive approach is defensive: a writer's task state is never silently swallowed or misparsed just because one file's header didn't declare that keyword. Treat additive-not-restrictive parsing in `workspace.py`/`_types.py` as intentional, not a bug.
 
 Touched: `pyproject.toml`, `src/org_workspace/_types.py`, `src/org_workspace/_vendor/orgparse/node.py`, `src/org_workspace/workspace.py`, `tests/test_state_vocabulary.py`, `tests/test_types.py`, `tests/test_workspace.py`.
+
+**DIP-0009 v2.0 baseline (owner decision G5, 2026-09-23; version 0.6.0, not yet released):** `StateConfig.default()` now seeds `TODO NEXT WAITING REVIEW | DONE DEFERRED CANCELLED`. QUEUED, WORKING and FAILED are retired from the baseline, and DEFERRED moved into the done class (still non-terminal). A file that still uses a retired keyword parses it only if its own header declares it; a headerless one reads it as part of the heading text.
 
 ## Real-World Testing Results
 

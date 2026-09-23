@@ -112,13 +112,14 @@ ws.save()
 ```python
 from org_workspace import StateConfig
 
-# Default GTD states
+# Default: the DIP-0009 v2.0 vocabulary
 config = StateConfig.default()
-# sequences: {"gtd": ["TODO", "NEXT", "WAITING", "DONE"]}
+# #+SEQ_TODO: TODO NEXT WAITING REVIEW | DONE DEFERRED CANCELLED
+# terminal: DONE, CANCELLED. DEFERRED is done-class but not terminal (it can wake to TODO).
 
-# With nightshift (autonomous execution) states
-config = StateConfig.nightshift()
-# adds: QUEUED, EXECUTING, REVIEW, FAILED
+# StateConfig.nightshift() is a deprecated alias for default(). The v1.1
+# execution overlay (QUEUED, WORKING, FAILED) is retired; a reader of a legacy
+# file passes its own StateConfig, or relies on that file's #+SEQ_TODO header.
 ```
 
 ## License

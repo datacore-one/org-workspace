@@ -46,8 +46,8 @@ class StateConfig:
     sequences: dict[str, list[str]]
     terminal_states: frozenset[str]
     # Keywords rendered right of `|` in #+SEQ_TODO (org "done" class). Distinct
-    # from terminal_states: FAILED is done-class for parsing/rendering but
-    # non-terminal for workflow — it can still transition to NEXT (retry).
+    # from terminal_states: DEFERRED (DIP-0009 v2.0) is done-class for
+    # parsing/rendering but non-terminal for workflow — it can wake to TODO.
     # None → falls back to terminal_states (backward compatible).
     done_class: frozenset[str] | None = None
 
@@ -60,7 +60,7 @@ class StateConfig:
         return frozenset(states)
 
     def is_terminal(self, state: str) -> bool:
-        """Check if a state is terminal (DONE, CANCELLED, FAILED, etc.)."""
+        """Check if a state is terminal (DONE, CANCELLED under the default)."""
         return state in self.terminal_states
 
     def valid_transitions(self, from_state: str) -> frozenset[str]:
@@ -103,21 +103,26 @@ class StateConfig:
 
     @classmethod
     def default(cls) -> StateConfig:
-        """Canonical DIP-0009 v1.1 vocabulary (2026-07-25).
+        """Canonical DIP-0009 v2.0 vocabulary.
 
-        One union set: human flow states plus the execution overlay
-        (QUEUED/WORKING/REVIEW/FAILED) that executors borrow while holding a
-        task. Loaded workspaces seed the parser with this set as a baseline,
-        so overlay states are recognized even in files whose #+SEQ_TODO
-        header omits them; per-file headers add keywords on top.
+        ``#+SEQ_TODO: TODO NEXT WAITING REVIEW | DONE DEFERRED CANCELLED``
+
+        v2.0 retired the execution overlay: QUEUED, WORKING and FAILED are no
+        longer states (migrated to NEXT, NEXT and REVIEW). DEFERRED is
+        done-class (right of ``|``) but NOT terminal: it is closed-but-wakeable
+        and may return to TODO. Terminal states are DONE and CANCELLED.
+
+        Loaded workspaces seed the parser with this set as a baseline; per-file
+        headers add keywords on top, so a file that still declares a retired
+        keyword in its own header keeps parsing it.
         """
         return cls(
             sequences={
-                "gtd": ["TODO", "NEXT", "WAITING", "DEFERRED", "QUEUED",
-                        "WORKING", "REVIEW", "DONE", "FAILED", "CANCELLED"],
+                "gtd": ["TODO", "NEXT", "WAITING", "REVIEW",
+                        "DONE", "DEFERRED", "CANCELLED"],
             },
             terminal_states=frozenset({"DONE", "CANCELLED"}),
-            done_class=frozenset({"DONE", "FAILED", "CANCELLED"}),
+            done_class=frozenset({"DONE", "DEFERRED", "CANCELLED"}),
         )
 
     @classmethod
@@ -125,8 +130,9 @@ class StateConfig:
         """Deprecated alias for :meth:`default`.
 
         DIP-0009 v1.1 merged the nightshift states into the canonical
-        vocabulary (EXECUTING retired — WORKING is canonical; FAILED is
-        non-terminal: it awaits a human decision and may requeue to NEXT).
+        vocabulary; v2.0 then retired the overlay (QUEUED, WORKING, FAILED).
+        A caller that must still read a legacy overlay file passes its own
+        StateConfig or relies on that file's #+SEQ_TODO header.
         """
         return cls.default()
 
