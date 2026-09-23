@@ -296,6 +296,70 @@ class TestTransition:
         assert node.todo == "DONE", "Non-recurring should stay DONE"
         assert node.closed is not None, "Non-recurring DONE should have CLOSED stamp"
 
+    def test_transition_recurring_advances_deadline(self, tmp_path):
+        """DEADLINE repeater advances on completion — mirrors SCHEDULED behaviour.
+
+        Regression test for github.com/datacore-one/org-workspace#17: prior to
+        the fix, a repeater on DEADLINE was ignored and the task terminated.
+        Reported by Amperture (nvim-orgmode habit tracker using DEADLINE).
+        """
+        import datetime as _dt
+        from org_workspace import OrgWorkspace
+
+        text = (
+            "#+SEQ_TODO: TODO(t) | DONE(d!)\n"
+            "* TODO Daily habit\n"
+            "  DEADLINE: <2026-09-14 Mon .+1d>\n"
+            "  :PROPERTIES:\n"
+            "  :ID: org-deadline-habit\n"
+            "  :END:\n"
+            "\n"
+            "* TODO Weekly deadline task\n"
+            "  DEADLINE: <2026-09-14 Mon +1w>\n"
+            "  :PROPERTIES:\n"
+            "  :ID: org-deadline-weekly\n"
+            "  :END:\n"
+            "\n"
+            "* TODO No-repeater deadline\n"
+            "  DEADLINE: <2026-09-14 Mon>\n"
+            "  :PROPERTIES:\n"
+            "  :ID: org-deadline-once\n"
+            "  :END:\n"
+        )
+        f = tmp_path / "deadline.org"
+        f.write_text(text)
+        ws = OrgWorkspace()
+        ws.load(f)
+
+        # .+1d on DEADLINE: habit — restarts from today
+        node = ws.find_by_id("org-deadline-habit")
+        ws.transition(node, "DONE")
+        node = ws.find_by_id("org-deadline-habit")
+        assert node.todo == "TODO", "DEADLINE recurring must revert to TODO"
+        expected = (_dt.date.today() + _dt.timedelta(days=1)).isoformat()
+        assert expected in str(node.deadline), (
+            f".+1d habit should advance to tomorrow, got {node.deadline}"
+        )
+        assert ".+1d" in str(node.deadline), "Repeater must be preserved"
+        assert node.get_property("LAST_REPEAT"), "LAST_REPEAT must be stamped"
+
+        # +1w on DEADLINE: plain advance
+        node = ws.find_by_id("org-deadline-weekly")
+        ws.transition(node, "DONE")
+        node = ws.find_by_id("org-deadline-weekly")
+        assert node.todo == "TODO", "DEADLINE +1w must stay alive"
+        assert "2026-09-21" in str(node.deadline), (
+            f"+1w from 2026-09-14 should be 2026-09-21, got {node.deadline}"
+        )
+        assert "+1w" in str(node.deadline), "Repeater must be preserved"
+
+        # No-repeater DEADLINE: normal terminal behaviour
+        node = ws.find_by_id("org-deadline-once")
+        ws.transition(node, "DONE")
+        node = ws.find_by_id("org-deadline-once")
+        assert node.todo == "DONE", "Non-repeating DEADLINE task should terminate"
+        assert node.closed is not None, "Non-repeating DONE should have CLOSED stamp"
+
 
 class TestSetProperty:
     def test_set_property(self, ws_two_files):

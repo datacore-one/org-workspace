@@ -266,14 +266,14 @@ class OrgWorkspace:
         Sets COMPLETED_BY when agent is provided.
 
         REPEATER HANDLING:
-        If transitioning to a terminal state AND SCHEDULED has an org-mode
-        repeater (``+Nd``, ``+Nw``, ``+Nm``, ``+Ny``, also ``++`` and ``.+``
-        prefixes), the task does NOT terminate. Instead:
+        If transitioning to a terminal state AND SCHEDULED or DEADLINE has an
+        org-mode repeater (``+Nd``, ``+Nw``, ``+Nm``, ``+Ny``, also ``++``
+        and ``.+`` prefixes), the task does NOT terminate. Instead:
           1. Old CLOSED timestamp recorded (for audit)
-          2. SCHEDULED advances by the repeater interval
+          2. The carrying timestamp (SCHEDULED or DEADLINE) advances
           3. State reverts to the first non-terminal state (typically TODO)
           4. The task stays alive for its next cycle
-        This matches Emacs org-mode behavior.
+        SCHEDULED is checked before DEADLINE. This matches Emacs org-mode behavior.
         """
         old_state = node.todo
         if old_state == new_state:
@@ -292,13 +292,16 @@ class OrgWorkspace:
         raw_node = node.node  # checks staleness
 
         # Check for repeater on terminal transition BEFORE setting state.
-        # If found, this is a recurring task — advance scheduled instead of
-        # marking permanently DONE.
-        if self._state_config.is_terminal(new_state) and raw_node.scheduled:
-            repeater = getattr(raw_node.scheduled, "_repeater", None)
-            if repeater is not None:
-                # repeater = (prefix, number, interval) e.g. ('+', 1, 'w')
-                self._advance_repeater(node, raw_node, new_state)
+        # If found, this is a recurring task — advance the timestamp instead of
+        # marking permanently DONE. Check SCHEDULED first, then DEADLINE.
+        if self._state_config.is_terminal(new_state):
+            repeater_attr = None
+            if raw_node.scheduled and getattr(raw_node.scheduled, "_repeater", None) is not None:
+                repeater_attr = "scheduled"
+            elif raw_node.deadline and getattr(raw_node.deadline, "_repeater", None) is not None:
+                repeater_attr = "deadline"
+            if repeater_attr is not None:
+                self._advance_repeater(node, raw_node, new_state, timestamp_attr=repeater_attr)
                 self._mark_dirty(node.path)
                 if agent:
                     self.set_property(node, "COMPLETED_BY", agent)
@@ -321,20 +324,26 @@ class OrgWorkspace:
         node: NodeView,
         raw_node: "OrgNode",
         terminal_state: str,
+        timestamp_attr: str = "scheduled",
     ) -> None:
-        """Advance a recurring task's SCHEDULED by its repeater interval.
+        """Advance a recurring task's planning timestamp by its repeater interval.
 
         Called from transition() when the target state is terminal and the
-        node has a repeater. Mirrors Emacs org-mode behavior: state reverts
-        to the first non-terminal state, SCHEDULED advances, the old CLOSED
-        timestamp is recorded as an audit property.
+        node has a repeater on SCHEDULED or DEADLINE. Mirrors Emacs org-mode
+        behavior: state reverts to the first non-terminal state, the carrying
+        timestamp advances, and the old CLOSED timestamp is recorded as an
+        audit property.
+
+        Args:
+            timestamp_attr: ``"scheduled"`` or ``"deadline"`` — which planning
+                timestamp carries the repeater cookie and should be advanced.
 
         Repeater prefixes:
-          ``+1w``  → advance from old SCHEDULED + 1 week
-          ``++1w`` → advance from old SCHEDULED + 1 week, repeatedly, until
+          ``+1w``  → advance from old date + 1 week
+          ``++1w`` → advance from old date + 1 week, repeatedly, until
                      the result is in the future (handles overdue tasks)
           ``.+1w`` → advance to TODAY + 1 week (habit-style; restart clock
-                     from completion time, not from previous SCHEDULED)
+                     from completion time, not from previous date)
 
         Intervals: d, w, m, y. Month/year handle short-month edge cases by
         clamping day-of-month to the last valid day.
@@ -343,7 +352,7 @@ class OrgWorkspace:
 
         from org_workspace._vendor.orgparse.date import OrgDate
 
-        sched = raw_node.scheduled
+        sched = getattr(raw_node, timestamp_attr)
         prefix, number, interval = sched._repeater
         start = sched._start
 
@@ -404,7 +413,7 @@ class OrgWorkspace:
             repeater=(prefix, number, interval),
             active=True,
         )
-        raw_node.scheduled = new_scheduled
+        setattr(raw_node, timestamp_attr, new_scheduled)
 
         # Record when this cycle completed — useful for "is the habit
         # actually firing?" audits. Stored as :LAST_REPEAT: property,
