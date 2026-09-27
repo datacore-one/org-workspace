@@ -21,21 +21,27 @@ class Query:
         self._ws = workspace
 
     def agenda(self, days: int = 7) -> list[NodeView]:
-        """Return nodes SCHEDULED within the next `days` days.
+        """Return open nodes SCHEDULED up to `days` days ahead.
 
-        Sorted by scheduled date ascending.
+        A missed date stays on the agenda (scheduled before today and still
+        open) instead of dropping out the day after; terminal-state tasks are
+        skipped. Sorted by scheduled date ascending, so missed dates come
+        first.
         """
         today = date.today()
         end = today + timedelta(days=days)
+        state_config = self._ws.state_config
         results = []
         for node in self._ws.all_nodes():
             sched = node.scheduled
             if sched is None:
                 continue
+            if node.todo and state_config.is_terminal(node.todo):
+                continue
             sched_date = _to_date(sched)
             if sched_date is None:
                 continue
-            if today <= sched_date <= end:
+            if sched_date <= end:
                 results.append(node)
         results.sort(key=lambda n: _to_date(n.scheduled))
         return results

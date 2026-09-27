@@ -12,6 +12,8 @@
   a new open task (TSK-2).
 - `OrgWorkspace(repair_duplicate_ids=True)` keeps the old in-memory
   regeneration for deliberate repair tools.
+- `Query.agenda()` keeps open tasks whose SCHEDULED date has passed (they
+  used to drop out the day after) and skips terminal-state tasks (TSK-7).
 - New helpers: `find_duplicate_ids(root)` (read-only) and
   `refuse_duplicate_ids(root, path=...)`. `dedup_ids()` is unchanged and is
   now only the explicit repair.
