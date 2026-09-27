@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1 (unreleased)
+
+### Fixed
+
+- `transition()` now advances a repeater on DEADLINE, not only on SCHEDULED.
+  Tasks with a `DEADLINE` cookie (e.g. habit trackers using nvim-orgmode)
+  no longer terminate on the first completion. Reported by @Amperture (#17).
+
+---
+
 ## 0.7.0 (unreleased)
 
 ### Changed (breaking)
@@ -24,7 +34,7 @@ Reconcile duplicate ids before upgrading (e.g. Datacore's
 `org_resolve_id_conflicts.py`), or readers of those files will stop with
 `DuplicateIdError`.
 
-## 0.6.0 (unreleased)
+## 0.6.0 (2026-09-23)
 
 ### Changed (breaking for default-config readers)
 
