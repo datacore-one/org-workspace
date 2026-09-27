@@ -64,8 +64,51 @@ def ensure_id(node: OrgNode) -> str:
     return new_id
 
 
+def find_duplicate_ids(root, existing_ids: set[str] | None = None) -> list[str]:
+    """Return the IDs that appear twice in a parsed tree (or collide with
+    ``existing_ids``), sorted. Read-only: nothing is changed."""
+    seen: set[str] = set(existing_ids) if existing_ids else set()
+    repeated: set[str] = set()
+
+    def _walk(node: OrgNode) -> None:
+        node_id = node.properties.get("ID")
+        if node_id:
+            if node_id in seen:
+                repeated.add(node_id)
+            seen.add(node_id)
+        for child in node.children:
+            _walk(child)
+
+    for child in root.children:
+        _walk(child)
+    return sorted(repeated)
+
+
+def refuse_duplicate_ids(root, existing_ids: set[str] | None = None,
+                         path: Path | str | None = None) -> None:
+    """Raise DuplicateIdError when a parsed tree repeats an ID.
+
+    This is what ``OrgWorkspace.load()`` does by default. A task keeps its
+    identity forever: silently giving the second copy a fresh id (see
+    ``dedup_ids``) turns a stale copy of a dismissed task into a *new* open
+    task the next time anything saves the file (TSK-2, 2026-09-26).
+    Duplicates must be reconciled explicitly, by a person or a repair tool.
+    """
+    repeated = find_duplicate_ids(root, existing_ids)
+    if repeated:
+        where = f" in {Path(path).name}" if path else ""
+        raise DuplicateIdError(
+            "duplicate :ID: requires explicit identity reconciliation: "
+            f"{', '.join(repeated[:3])}{where}"
+        )
+
+
 def dedup_ids(root, existing_ids: set[str] | None = None) -> list[tuple[OrgNode, str, str]]:
-    """Find and fix duplicate IDs within a parsed tree.
+    """Explicit repair: find and fix duplicate IDs within a parsed tree.
+
+    Not called on an ordinary load any more (that refuses, see
+    ``refuse_duplicate_ids``). Use it only from a deliberate repair path,
+    e.g. ``OrgWorkspace(repair_duplicate_ids=True)``.
 
     Walks all nodes. When the same ID appears on multiple nodes,
     the first occurrence keeps the original ID and subsequent

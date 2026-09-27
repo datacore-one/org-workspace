@@ -26,8 +26,10 @@ from org_workspace.identifiers import (
     DuplicateIdError,
     IdIndex,
     ensure_id,
+    find_duplicate_ids,
     generate_id,
     heading_hash,
+    refuse_duplicate_ids,
 )
 from org_workspace.log import SessionLog, add_clock_entry, add_logbook_entry, add_state_change_entry
 from org_workspace.node_view import NodeView, StaleNodeError
@@ -40,7 +42,7 @@ from org_workspace.workspace import (
     OrgWorkspace,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 __all__ = [
     # Core types
@@ -60,8 +62,10 @@ __all__ = [
     "DuplicateIdError",
     "IdIndex",
     "ensure_id",
+    "find_duplicate_ids",
     "generate_id",
     "heading_hash",
+    "refuse_duplicate_ids",
     # Workspace
     "OrgWorkspace",
     "InvalidTransitionError",

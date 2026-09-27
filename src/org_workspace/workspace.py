@@ -16,7 +16,13 @@ from org_workspace._types import StateConfig
 from org_workspace._vendor.orgparse import dumps as _orgparse_dumps
 from org_workspace._vendor.orgparse import load
 from org_workspace._vendor.orgparse.node import OrgNode, OrgRootNode
-from org_workspace.identifiers import IdIndex, dedup_ids, generate_id, heading_hash
+from org_workspace.identifiers import (
+    IdIndex,
+    dedup_ids,
+    generate_id,
+    heading_hash,
+    refuse_duplicate_ids,
+)
 from org_workspace.node_view import NodeView
 
 
@@ -113,8 +119,12 @@ class OrgWorkspace:
         self,
         roots: list[Path] | None = None,
         state_config: StateConfig | None = None,
+        repair_duplicate_ids: bool = False,
     ):
         self._state_config = state_config or StateConfig.default()
+        # Default: a duplicate :ID: refuses the load (DuplicateIdError).
+        # True: the old in-memory regeneration, for explicit repair tools only.
+        self._repair_duplicate_ids = repair_duplicate_ids
         self._files: dict[Path, OrgRootNode] = {}
         self._dirty: set[Path] = set()
         self._generations: dict[Path, int] = {}
@@ -138,26 +148,35 @@ class OrgWorkspace:
     def load(self, path: Path) -> None:
         """Load or reload an org file into the workspace.
 
-        Automatically deduplicates IDs in memory: if two nodes in the file
-        share an ID (or collide with an already-indexed ID), the later node
-        gets a regenerated unique ID in the loaded tree. The file on disk is
-        NOT touched — loading is read-only. (Write-on-load dirtied every repo
-        whose org files were merely queried, which broke git syncs mid-flight
-        and stranded work in stashes — 2026-07-29 post-mortem.) Regenerated
-        IDs persist only through an explicit write path: ``save()`` after an
-        edit, or the adapter's ``ensure-ids`` command.
+        Refuses duplicate IDs: if two nodes in the file share an ID (or one
+        collides with an already-indexed ID), ``DuplicateIdError`` is raised
+        and nothing is loaded. Loading never changes an identity. (It used to
+        regenerate the later ID in memory; the next unrelated ``save()`` then
+        wrote it to disk and a stale copy of a dismissed task came back as a
+        new open task — TSK-2, 2026-09-26.) The file on disk is never touched
+        by loading (2026-07-29 post-mortem).
+
+        A workspace built with ``repair_duplicate_ids=True`` keeps the old
+        behaviour (regenerate in memory) for deliberate repair tools.
         """
         path = Path(path).resolve()
         # If reloading, remove old index entries and bump generation
         if path in self._files:
             self._id_index.remove_file(path)
         root = load(str(path), env=self._parse_env(path))
-        # Dedup IDs before indexing — regenerate collisions (in memory only)
-        dedup_ids(root, existing_ids=self._id_index.all_ids())
+        self._check_ids(root, path)
         self._files[path] = root
         self._dirty.discard(path)
         self._generations[path] = self._generations.get(path, 0) + 1
         self._id_index.add_file(path, root)
+
+    def _check_ids(self, root, path: Path) -> None:
+        """Refuse (default) or explicitly repair duplicate IDs before indexing."""
+        existing = self._id_index.all_ids()
+        if self._repair_duplicate_ids:
+            dedup_ids(root, existing_ids=existing)
+        else:
+            refuse_duplicate_ids(root, existing_ids=existing, path=path)
 
     def _parse_env(self, path: Path):
         """Fresh orgparse env seeded with the canonical state vocabulary.
@@ -181,13 +200,13 @@ class OrgWorkspace:
     def _reload_preserving_dirty(self, path: Path) -> None:
         """Reload a file without clearing its dirty status.
 
-        Like ``load()``, dedup is in-memory only — reloading never writes.
+        Like ``load()``, a duplicate ID refuses; reloading never writes.
         """
         path = Path(path).resolve()
         if path in self._files:
             self._id_index.remove_file(path)
         root = load(str(path), env=self._parse_env(path))
-        dedup_ids(root, existing_ids=self._id_index.all_ids())
+        self._check_ids(root, path)
         self._files[path] = root
         self._generations[path] = self._generations.get(path, 0) + 1
         self._id_index.add_file(path, root)

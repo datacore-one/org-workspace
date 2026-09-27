@@ -11,6 +11,8 @@ from org_workspace.identifiers import (
     DuplicateIdError,
     IdIndex,
     dedup_ids,
+    find_duplicate_ids,
+    refuse_duplicate_ids,
     ensure_id,
     generate_id,
     heading_hash,
@@ -151,6 +153,28 @@ class TestIdIndex:
         ids = idx.all_ids()
         assert "550e8400-e29b-41d4-a716-446655440001" in ids
         assert len(ids) == 2
+
+
+class TestRefuseDuplicateIds:
+    def test_clean_tree_passes(self):
+        root = loads("* A\n  :PROPERTIES:\n  :ID: a\n  :END:\n")
+        assert find_duplicate_ids(root) == []
+        refuse_duplicate_ids(root)
+
+    def test_duplicate_raises_and_changes_nothing(self):
+        root = loads(
+            "* A\n  :PROPERTIES:\n  :ID: x\n  :END:\n"
+            "* B\n  :PROPERTIES:\n  :ID: x\n  :END:\n"
+        )
+        assert find_duplicate_ids(root) == ["x"]
+        with pytest.raises(DuplicateIdError, match="x in f.org"):
+            refuse_duplicate_ids(root, path="f.org")
+        assert [c.properties["ID"] for c in root.children] == ["x", "x"]
+
+    def test_collision_with_existing_ids(self):
+        root = loads("* A\n  :PROPERTIES:\n  :ID: taken\n  :END:\n")
+        with pytest.raises(DuplicateIdError):
+            refuse_duplicate_ids(root, existing_ids={"taken"})
 
 
 class TestDedupIds:

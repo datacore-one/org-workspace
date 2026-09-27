@@ -9,6 +9,7 @@ import pytest
 from org_workspace._compat import dumps
 from org_workspace._types import StateConfig
 from org_workspace._vendor.orgparse import load
+from org_workspace.identifiers import DuplicateIdError
 from org_workspace.node_view import NodeView, StaleNodeError
 from org_workspace.workspace import InvalidTransitionError, OrgWorkspace
 
@@ -955,63 +956,50 @@ class TestReloadStaleness:
             _ = node.heading
 
 
-class TestDuplicateIdDedup:
-    """Workspace deduplicates IDs on load instead of crashing."""
+class TestDuplicateIdRefused:
+    """A duplicate :ID: refuses the load; identity is never rewritten (TSK-2).
 
-    def test_dedup_within_file(self, tmp_path):
+    Explicit repair (``repair_duplicate_ids=True``) keeps the old in-memory
+    regeneration for deliberate repair tools.
+    """
+
+    DUPES = (
+        "* TODO Task A\n  :PROPERTIES:\n  :ID: same-id\n  :END:\n"
+        "* TODO Task B\n  :PROPERTIES:\n  :ID: same-id\n  :END:\n"
+    )
+
+    def test_duplicate_within_file_refused(self, tmp_path):
         f = tmp_path / "dupes.org"
-        f.write_text(
-            "* TODO Task A\n"
-            "  :PROPERTIES:\n"
-            "  :ID: same-id\n"
-            "  :END:\n"
-            "* TODO Task B\n"
-            "  :PROPERTIES:\n"
-            "  :ID: same-id\n"
-            "  :END:\n"
-        )
-        ws = OrgWorkspace(roots=[f])  # should not raise
-        # First node keeps original ID
-        node_a = ws.find_by_id("same-id")
-        assert node_a is not None
-        assert node_a.heading == "Task A"
-        # Both nodes should be findable (second got a new ID)
-        nodes = list(ws.all_nodes())
-        assert len(nodes) == 2
-        ids = {n.id() for n in nodes}
-        assert "same-id" in ids
-        assert len(ids) == 2  # two distinct IDs
+        f.write_text(self.DUPES)
+        with pytest.raises(DuplicateIdError, match="same-id"):
+            OrgWorkspace(roots=[f])
+        assert f.read_text() == self.DUPES
 
-    def test_dedup_across_files(self, tmp_path):
+    def test_duplicate_across_files_refused(self, tmp_path):
         f1 = tmp_path / "a.org"
         f2 = tmp_path / "b.org"
         f1.write_text("* TODO Task A\n  :PROPERTIES:\n  :ID: shared-id\n  :END:\n")
         f2.write_text("* TODO Task B\n  :PROPERTIES:\n  :ID: shared-id\n  :END:\n")
-        ws = OrgWorkspace(roots=[f1, f2])  # should not raise
-        # First loaded file keeps original
-        node_a = ws.find_by_id("shared-id")
-        assert node_a is not None
-        assert node_a.heading == "Task A"
-        # Second file's node got regenerated ID
-        nodes = list(ws.all_nodes())
-        ids = {n.id() for n in nodes}
-        assert len(ids) == 2
+        ws = OrgWorkspace(roots=[f1])
+        with pytest.raises(DuplicateIdError, match="shared-id"):
+            ws.load(f2)
+        # The first file stays loaded and unchanged
+        assert ws.find_by_id("shared-id").heading == "Task A"
+        assert f2.resolve() not in ws.files()
 
-    def test_dedup_not_persisted_to_disk(self, tmp_path):
-        """Loading is read-only — dedup happens in memory, never on disk.
-
-        Write-on-load dirtied every git repo whose org files were merely
-        queried, breaking syncs mid-flight (2026-07-29 post-mortem).
-        """
-        f = tmp_path / "dupes.org"
-        original = (
-            "* TODO Task A\n  :PROPERTIES:\n  :ID: dup\n  :END:\n"
-            "* TODO Task B\n  :PROPERTIES:\n  :ID: dup\n  :END:\n"
-        )
-        f.write_text(original)
+    def test_reload_same_file_is_not_a_duplicate(self, tmp_path):
+        f = tmp_path / "a.org"
+        f.write_text("* TODO Task A\n  :PROPERTIES:\n  :ID: only\n  :END:\n")
         ws = OrgWorkspace(roots=[f])
-        # In memory: two distinct IDs
+        ws.reload(f)
+        assert ws.find_by_id("only") is not None
+
+    def test_explicit_repair_regenerates_in_memory_only(self, tmp_path):
+        """Loading is read-only even when repairing (2026-07-29 post-mortem)."""
+        f = tmp_path / "dupes.org"
+        f.write_text(self.DUPES)
+        ws = OrgWorkspace(roots=[f], repair_duplicate_ids=True)
+        assert ws.find_by_id("same-id").heading == "Task A"
         ids = {n.id() for n in ws.all_nodes()}
         assert len(ids) == 2
-        # On disk: untouched
-        assert f.read_text() == original
+        assert f.read_text() == self.DUPES

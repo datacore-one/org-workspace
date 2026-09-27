@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.0 (unreleased)
+
+### Changed (breaking)
+
+- `OrgWorkspace.load()` refuses duplicate `:ID:`s. A file whose headings
+  repeat an id, or an id already indexed from another file, raises
+  `DuplicateIdError` naming the id and file, and nothing is loaded. Loading
+  used to give the later copy a fresh random id in memory; the next unrelated
+  `save()` wrote it to disk, and a stale copy of a dismissed task came back as
+  a new open task (TSK-2).
+- `OrgWorkspace(repair_duplicate_ids=True)` keeps the old in-memory
+  regeneration for deliberate repair tools.
+- New helpers: `find_duplicate_ids(root)` (read-only) and
+  `refuse_duplicate_ids(root, path=...)`. `dedup_ids()` is unchanged and is
+  now only the explicit repair.
+
+### Upgrading
+
+Reconcile duplicate ids before upgrading (e.g. Datacore's
+`org_resolve_id_conflicts.py`), or readers of those files will stop with
+`DuplicateIdError`.
+
 ## 0.6.0 (unreleased)
 
 ### Changed (breaking for default-config readers)
