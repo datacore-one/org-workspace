@@ -11,11 +11,11 @@ from org_workspace.identifiers import (
     DuplicateIdError,
     IdIndex,
     dedup_ids,
-    find_duplicate_ids,
-    refuse_duplicate_ids,
     ensure_id,
+    find_duplicate_ids,
     generate_id,
     heading_hash,
+    refuse_duplicate_ids,
 )
 
 _ID_PATTERN = re.compile(r"^org-\d{8}-\d{6}-[0-9a-f]{8}$")
