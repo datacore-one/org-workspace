@@ -23,7 +23,7 @@ def ws_with_task(tmp_path):
         "  :END:\n"
     )
     f = tmp_path / "tasks.org"
-    f.write_text(content)
+    f.write_text(content, encoding="utf-8")
     ws = OrgWorkspace(roots=[f])
     return ws, f
 
@@ -31,20 +31,20 @@ def ws_with_task(tmp_path):
 class TestFileLock:
     def test_acquire_and_release(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("content")
+        f.write_text("content", encoding="utf-8")
         lock = FileLock(f)
         lock.acquire()
         lock.release()
 
     def test_context_manager(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("content")
+        f.write_text("content", encoding="utf-8")
         with FileLock(f):
             pass  # lock held
 
     def test_second_acquire_times_out(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("content")
+        f.write_text("content", encoding="utf-8")
         lock1 = FileLock(f)
         lock1.acquire()
         try:
@@ -56,7 +56,7 @@ class TestFileLock:
 
     def test_release_allows_reacquire(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("content")
+        f.write_text("content", encoding="utf-8")
         lock = FileLock(f)
         lock.acquire()
         lock.release()
@@ -69,15 +69,15 @@ class TestMultiLock:
         """INV-6: locks acquired in lexicographic order."""
         b = tmp_path / "b.org"
         a = tmp_path / "a.org"
-        b.write_text("b")
-        a.write_text("a")
+        b.write_text("b", encoding="utf-8")
+        a.write_text("a", encoding="utf-8")
         # Pass in reverse order — should still acquire a first
         with multi_lock([b, a]) as locks:
             assert len(locks) == 2
 
     def test_deduplicates(self, tmp_path):
         f = tmp_path / "a.org"
-        f.write_text("a")
+        f.write_text("a", encoding="utf-8")
         with multi_lock([f, f]) as locks:
             assert len(locks) == 1
 
@@ -85,41 +85,41 @@ class TestMultiLock:
 class TestOptimisticLock:
     def test_snapshot_and_verify_unchanged(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("original content")
+        f.write_text("original content", encoding="utf-8")
         lock = OptimisticLock(f)
         lock.snapshot()
         assert lock.verify() is True
 
     def test_verify_detects_change(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("original content")
+        f.write_text("original content", encoding="utf-8")
         lock = OptimisticLock(f)
         lock.snapshot()
-        f.write_text("modified content")
+        f.write_text("modified content", encoding="utf-8")
         assert lock.verify() is False
 
     def test_save_with_check_succeeds(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("original")
+        f.write_text("original", encoding="utf-8")
         lock = OptimisticLock(f)
         lock.snapshot()
         lock.save_with_check("new content")
-        assert f.read_text() == "new content"
+        assert f.read_text(encoding="utf-8") == "new content"
 
     def test_save_with_check_raises_on_conflict(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("original")
+        f.write_text("original", encoding="utf-8")
         lock = OptimisticLock(f)
         lock.snapshot()
-        f.write_text("external change")
+        f.write_text("external change", encoding="utf-8")
         with pytest.raises(ConflictError):
             lock.save_with_check("my change")
         # File should still have external change
-        assert f.read_text() == "external change"
+        assert f.read_text(encoding="utf-8") == "external change"
 
     def test_no_snapshot_raises(self, tmp_path):
         f = tmp_path / "test.org"
-        f.write_text("content")
+        f.write_text("content", encoding="utf-8")
         lock = OptimisticLock(f)
         with pytest.raises(RuntimeError, match="No snapshot"):
             lock.verify()

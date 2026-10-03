@@ -55,31 +55,31 @@ class TestRoundTrip:
     def test_round_trip_minimal(self, minimal_org):
         root = load(str(minimal_org))
         result = dumps(root)
-        original = minimal_org.read_text()
+        original = minimal_org.read_text(encoding="utf-8")
         assert result == original, f"Round-trip failed:\n{repr(result)}\n!=\n{repr(original)}"
 
     def test_round_trip_rich_task(self, rich_task_org):
         root = load(str(rich_task_org))
         result = dumps(root)
-        original = rich_task_org.read_text()
+        original = rich_task_org.read_text(encoding="utf-8")
         assert result == original
 
     def test_round_trip_nightshift(self, nightshift_org):
         root = load(str(nightshift_org))
         result = dumps(root)
-        original = nightshift_org.read_text()
+        original = nightshift_org.read_text(encoding="utf-8")
         assert result == original
 
     def test_round_trip_multiline_props(self, multiline_props_org):
         root = load(str(multiline_props_org))
         result = dumps(root)
-        original = multiline_props_org.read_text()
+        original = multiline_props_org.read_text(encoding="utf-8")
         assert result == original
 
     def test_round_trip_dependencies(self, dependencies_org):
         root = load(str(dependencies_org))
         result = dumps(root)
-        original = dependencies_org.read_text()
+        original = dependencies_org.read_text(encoding="utf-8")
         assert result == original
 
     def test_round_trip_loads(self):

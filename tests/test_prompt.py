@@ -30,7 +30,7 @@ class TestGetPrompt:
             "  This is the body text used as prompt.\n"
         )
         f = tmp_path / "body.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         node = ws.find_by_id("body-001")
         result = get_prompt(node)
@@ -44,7 +44,7 @@ class TestGetPrompt:
             "  :END:\n"
         )
         f = tmp_path / "empty.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         node = ws.find_by_id("empty-001")
         result = get_prompt(node)
@@ -60,7 +60,7 @@ class TestGetRole:
     def test_returns_none_when_missing(self, tmp_path):
         content = "* TODO No role\n  :PROPERTIES:\n  :ID: nr-001\n  :END:\n"
         f = tmp_path / "norole.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         node = ws.find_by_id("nr-001")
         assert get_role(node) is None

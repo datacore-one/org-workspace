@@ -102,7 +102,7 @@ class TestSessionLog:
         log.log("Completed task", node_id="abc", agent="agent-1")
         path = log.flush(tmp_path)
         assert path.exists()
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         assert "test-123" in content
         assert "Started processing" in content
         assert "Completed task" in content
@@ -115,7 +115,7 @@ class TestSessionLog:
         log.flush(tmp_path)
         log.log("Entry 2")
         path = log.flush(tmp_path)
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         assert "Entry 2" in content
         # Entry 1 should not appear in second flush
 

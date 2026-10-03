@@ -255,7 +255,7 @@ class TestTransition:
             ":END:\n"
         )
         f = tmp_path / "recur.org"
-        f.write_text(text)
+        f.write_text(text, encoding="utf-8")
         ws = OrgWorkspace()
         ws.load(f)
 
@@ -329,7 +329,7 @@ class TestTransition:
             "  :END:\n"
         )
         f = tmp_path / "deadline.org"
-        f.write_text(text)
+        f.write_text(text, encoding="utf-8")
         ws = OrgWorkspace()
         ws.load(f)
 
@@ -426,7 +426,7 @@ class TestSetProperty:
             "    body text after the drawers\n"
         )
         f = tmp_path / "interleaved.org"
-        f.write_text(text)
+        f.write_text(text, encoding="utf-8")
         ws = OrgWorkspace()
         ws.load(f)
         node = next(ws.all_nodes())
@@ -434,7 +434,7 @@ class TestSetProperty:
         ws.set_property(node, "ID", "org-test-recovery")
         assert node.properties.get("ID") == "org-test-recovery"
         ws.save(f)
-        result = f.read_text()
+        result = f.read_text(encoding="utf-8")
         # Original body must survive (no truncation)
         assert "body text after the drawers" in result
         # New ID must be present
@@ -485,7 +485,7 @@ class TestSetProperty:
             "Body line 3\n"
         )
         f = tmp_path / "nested_logbook.org"
-        f.write_text(text)
+        f.write_text(text, encoding="utf-8")
 
         before_lines = text.count("\n")
 
@@ -499,7 +499,7 @@ class TestSetProperty:
         ws.set_property(after, "TEST_PROP", "test")
         ws.save(f)
 
-        result = f.read_text()
+        result = f.read_text(encoding="utf-8")
         after_lines = result.count("\n")
 
         # Critical: must not silently lose >10% of the file.
@@ -570,7 +570,7 @@ class TestSetProperty:
 
         text = "\n".join(f"* TODO Task {i}\n  Body for task {i}\n" for i in range(50))
         f = tmp_path / "many.org"
-        f.write_text(text)
+        f.write_text(text, encoding="utf-8")
 
         ws = OrgWorkspace()
         ws.load(f)
@@ -585,7 +585,9 @@ class TestSetProperty:
             ws.save(f)
 
         # And on disk, the original content must still be intact.
-        assert "Task 49" in f.read_text(), "Original file must be preserved on guard trip"
+        assert "Task 49" in f.read_text(encoding="utf-8"), (
+            "Original file must be preserved on guard trip"
+        )
 
 
 class TestSetHeading:
@@ -663,7 +665,7 @@ class TestCreateNode:
             "** B child 1\n"
         )
         f = tmp_path / "two_sections.org"
-        f.write_text(org_content)
+        f.write_text(org_content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
 
         # Find Section A as parent
@@ -830,8 +832,8 @@ class TestRefile:
 
         src = tmp_path / "source.org"
         dst = tmp_path / "target.org"
-        src.write_text(source_text)
-        dst.write_text(target_text)
+        src.write_text(source_text, encoding="utf-8")
+        dst.write_text(target_text, encoding="utf-8")
 
         ws = OrgWorkspace(roots=[src, dst])
         node = ws.find_by_id("ml-refile-001")
@@ -848,12 +850,12 @@ class TestRefile:
         assert ws.find_by_id("ml-refile-001").path == dst
 
         # Source no longer contains the node
-        source_content = src.read_text()
+        source_content = src.read_text(encoding="utf-8")
         assert "ml-refile-001" not in source_content
         assert "Bootstrap line" not in source_content
 
         # Target contains the node with all continuation lines intact
-        target_content = dst.read_text()
+        target_content = dst.read_text(encoding="utf-8")
         assert "ml-refile-001" in target_content
         for i in range(1, 16):
             assert f"Bootstrap line {i}" in target_content, (
@@ -891,8 +893,8 @@ class TestRefile:
 
         src = tmp_path / "source.org"
         dst = tmp_path / "target.org"
-        src.write_text(source_text)
-        dst.write_text(target_text)
+        src.write_text(source_text, encoding="utf-8")
+        dst.write_text(target_text, encoding="utf-8")
 
         ws = OrgWorkspace(roots=[src, dst])
         node = ws.find_by_id("ml-refile-ctx-001")
@@ -901,14 +903,14 @@ class TestRefile:
         ws.refile(node, dst)
         ws.save_all()
 
-        target_content = dst.read_text()
+        target_content = dst.read_text(encoding="utf-8")
         assert "ml-refile-ctx-001" in target_content
         assert "ledger_daily.sh" in target_content
         assert "The asymmetry may be correct" in target_content
         assert "splitting so ingest runs hourly" in target_content
         assert "same latency that made app appear broken" in target_content
 
-        assert "ml-refile-ctx-001" not in src.read_text()
+        assert "ml-refile-ctx-001" not in src.read_text(encoding="utf-8")
 
     def test_refile_shrink_guard_still_fires_on_serializer_bug(self, tmp_path, monkeypatch):
         """The expected_delta fix must NOT suppress the guard for genuine regressions.
@@ -925,8 +927,11 @@ class TestRefile:
         ) + "\n"
         src = tmp_path / "source.org"
         dst = tmp_path / "target.org"
-        src.write_text(source_text)
-        dst.write_text("* TODO Target\n  :PROPERTIES:\n  :ID: target-guard\n  :END:\n")
+        src.write_text(source_text, encoding="utf-8")
+        dst.write_text(
+            "* TODO Target\n  :PROPERTIES:\n  :ID: target-guard\n  :END:\n",
+            encoding="utf-8",
+        )
 
         ws = OrgWorkspace(roots=[src, dst])
 
@@ -948,7 +953,7 @@ class TestRefile:
             ws.refile(node, dst)
 
         # Source file on disk must still be intact
-        assert "guard-29" in src.read_text()
+        assert "guard-29" in src.read_text(encoding="utf-8")
 
 
 class TestSave:
@@ -958,7 +963,7 @@ class TestSave:
         ws.transition(node, "NEXT")
         ws.save(f1)
         # Read back and verify
-        content = f1.read_text()
+        content = f1.read_text(encoding="utf-8")
         assert "NEXT" in content
         assert f1 not in ws.dirty_files()
 
@@ -987,7 +992,7 @@ class TestRoundTrip:
 
     def test_unmodified_round_trip(self, ws_two_files):
         ws, f1, _ = ws_two_files
-        original = f1.read_text()
+        original = f1.read_text(encoding="utf-8")
         result = dumps(ws.files()[f1])
         assert result == original
 
@@ -997,7 +1002,7 @@ class TestRoundTrip:
         node = ws.find_by_id("550e8400-e29b-41d4-a716-446655440001")
         ws.set_heading(node, "Modified task")
         ws.save(f1)
-        content = f1.read_text()
+        content = f1.read_text(encoding="utf-8")
         assert "Modified task" in content
         # Reload and verify
         root = load(str(f1))
@@ -1035,16 +1040,22 @@ class TestDuplicateIdRefused:
 
     def test_duplicate_within_file_refused(self, tmp_path):
         f = tmp_path / "dupes.org"
-        f.write_text(self.DUPES)
+        f.write_text(self.DUPES, encoding="utf-8")
         with pytest.raises(DuplicateIdError, match="same-id"):
             OrgWorkspace(roots=[f])
-        assert f.read_text() == self.DUPES
+        assert f.read_text(encoding="utf-8") == self.DUPES
 
     def test_duplicate_across_files_refused(self, tmp_path):
         f1 = tmp_path / "a.org"
         f2 = tmp_path / "b.org"
-        f1.write_text("* TODO Task A\n  :PROPERTIES:\n  :ID: shared-id\n  :END:\n")
-        f2.write_text("* TODO Task B\n  :PROPERTIES:\n  :ID: shared-id\n  :END:\n")
+        f1.write_text(
+            "* TODO Task A\n  :PROPERTIES:\n  :ID: shared-id\n  :END:\n",
+            encoding="utf-8",
+        )
+        f2.write_text(
+            "* TODO Task B\n  :PROPERTIES:\n  :ID: shared-id\n  :END:\n",
+            encoding="utf-8",
+        )
         ws = OrgWorkspace(roots=[f1])
         with pytest.raises(DuplicateIdError, match="shared-id"):
             ws.load(f2)
@@ -1054,7 +1065,7 @@ class TestDuplicateIdRefused:
 
     def test_reload_same_file_is_not_a_duplicate(self, tmp_path):
         f = tmp_path / "a.org"
-        f.write_text("* TODO Task A\n  :PROPERTIES:\n  :ID: only\n  :END:\n")
+        f.write_text("* TODO Task A\n  :PROPERTIES:\n  :ID: only\n  :END:\n", encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         ws.reload(f)
         assert ws.find_by_id("only") is not None
@@ -1062,9 +1073,9 @@ class TestDuplicateIdRefused:
     def test_explicit_repair_regenerates_in_memory_only(self, tmp_path):
         """Loading is read-only even when repairing (2026-07-29 post-mortem)."""
         f = tmp_path / "dupes.org"
-        f.write_text(self.DUPES)
+        f.write_text(self.DUPES, encoding="utf-8")
         ws = OrgWorkspace(roots=[f], repair_duplicate_ids=True)
         assert ws.find_by_id("same-id").heading == "Task A"
         ids = {n.id() for n in ws.all_nodes()}
         assert len(ids) == 2
-        assert f.read_text() == self.DUPES
+        assert f.read_text(encoding="utf-8") == self.DUPES

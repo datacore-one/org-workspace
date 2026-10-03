@@ -69,7 +69,7 @@ def query_file(tmp_path):
         f"  :END:\n"
     )
     f = tmp_path / "query_test.org"
-    f.write_text(content)
+    f.write_text(content, encoding="utf-8")
     return f
 
 
@@ -166,7 +166,7 @@ class TestStale:
         """
         content = "* TODO Brand new task\n"
         f = tmp_path / "brand_new.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         results = Query(ws).stale(days=30)
         headings = [n.heading for n in results]
@@ -211,7 +211,7 @@ class TestNextActionEdgeCases:
         """next_action returns None when workspace has no TODO/NEXT tasks."""
         content = "* DONE All done\n  :PROPERTIES:\n  :ID: edge-001\n  :END:\n"
         f = tmp_path / "done.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         result = Query(ws).next_action()
         assert result is None
@@ -226,7 +226,7 @@ class TestNextActionEdgeCases:
             "  :END:\n"
         )
         f = tmp_path / "claimed.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         result = Query(ws).next_action()
         assert result is None
@@ -244,7 +244,7 @@ class TestStaleEdgeCases:
             f"  :END:\n"
         )
         f = tmp_path / "old.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         results = Query(ws).stale(days=30)
         ids = {n.id() for n in results}
@@ -261,7 +261,7 @@ class TestStaleEdgeCases:
             f"  :END:\n"
         )
         f = tmp_path / "created.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         results = Query(ws).stale(days=30)
         ids = {n.id() for n in results}
@@ -278,7 +278,7 @@ class TestStaleEdgeCases:
             f"  :END:\n"
         )
         f = tmp_path / "recent.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         results = Query(ws).stale(days=30)
         ids = {n.id() for n in results}
@@ -288,7 +288,7 @@ class TestStaleEdgeCases:
         """Regular headings without a TODO keyword are not flagged stale."""
         content = "* Section heading without state\n** Sub-section\n"
         f = tmp_path / "plain.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         results = Query(ws).stale(days=30)
         headings = [n.heading for n in results]

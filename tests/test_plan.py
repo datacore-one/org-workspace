@@ -131,7 +131,7 @@ class TestCycleDetection:
             "   :END:\n"
         )
         f = tmp_path / "cycle.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         root = list(ws.all_nodes())[0]  # Plan heading
         p = Plan(root, ws)
@@ -153,7 +153,7 @@ class TestCycleDetection:
             "   :END:\n"
         )
         f = tmp_path / "cycle.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         root = list(ws.all_nodes())[0]
         p = Plan(root, ws)

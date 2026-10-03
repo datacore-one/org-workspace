@@ -47,5 +47,5 @@ def tmp_org(tmp_path):
     """Create a temporary org file for mutation tests."""
     content = "* TODO Test task\n  :PROPERTIES:\n  :ID: test-001\n  :END:\n  Body text.\n"
     path = tmp_path / "test.org"
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     return path

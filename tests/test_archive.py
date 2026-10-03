@@ -48,7 +48,7 @@ def archive_ws(tmp_path):
         "   Deploy notes and details.\n"
     )
     f = tmp_path / "next_actions.org"
-    f.write_text(content)
+    f.write_text(content, encoding="utf-8")
     ws = OrgWorkspace(roots=[f])
     return ws, f
 
@@ -118,7 +118,7 @@ class TestArchivePlan:
             "   :END:\n"
         )
         f = tmp_path / "plans.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         root = ws.find_by_id("plan-root")
         plan = Plan(root, ws)
@@ -147,14 +147,14 @@ class TestArchiveHierarchyPreservation:
             "   :END:\n"
         )
         f = tmp_path / "next_actions.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
 
         node = ws.find_by_id("hier-001")
         archive_node(ws, node)
 
         archive_path = default_archive_path(f)
-        archive_text = archive_path.read_text()
+        archive_text = archive_path.read_text(encoding="utf-8")
 
         # Print actual archive content for diagnosis
         print("=== ARCHIVE FILE CONTENT ===")
@@ -212,7 +212,7 @@ class TestArchiveDone:
             "   :END:\n"
         )
         f = tmp_path / "recent.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         archived = archive_done(ws, older_than_days=30)
         assert "recent-001" not in archived

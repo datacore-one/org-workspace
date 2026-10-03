@@ -36,7 +36,7 @@ class TestGetContext:
     def test_empty_node_returns_empty_dict(self, tmp_path):
         content = "* TODO Plain task\n  :PROPERTIES:\n  :ID: plain-001\n  :END:\n"
         f = tmp_path / "plain.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         node = ws.find_by_id("plain-001")
         ctx = get_context(node)
@@ -55,7 +55,7 @@ class TestGetRefs:
             "  :END:\n"
         )
         f = tmp_path / "refs.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         node = ws.find_by_id("ref-001")
         refs = get_refs(node)
@@ -71,7 +71,7 @@ class TestGetRefs:
             "  :END:\n"
         )
         f = tmp_path / "single.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         node = ws.find_by_id("ref-002")
         refs = get_refs(node)
@@ -80,7 +80,7 @@ class TestGetRefs:
     def test_no_refs_returns_empty(self, tmp_path):
         content = "* TODO No refs\n  :PROPERTIES:\n  :ID: nr-001\n  :END:\n"
         f = tmp_path / "norefs.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         node = ws.find_by_id("nr-001")
         assert get_refs(node) == []
@@ -109,7 +109,7 @@ class TestBuildExecutionContext:
     def test_minimal_node(self, tmp_path):
         content = "* TODO Minimal\n  :PROPERTIES:\n  :ID: min-001\n  :END:\n"
         f = tmp_path / "min.org"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         ws = OrgWorkspace(roots=[f])
         node = ws.find_by_id("min-001")
         ctx = build_execution_context(node)

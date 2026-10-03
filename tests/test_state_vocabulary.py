@@ -155,4 +155,4 @@ def test_transition_and_save_roundtrip_review_state(tmp_path):
     ws2.load(f)
     node2 = [n for n in list(ws2.all_nodes()) if n.level == 2][0]
     assert node2.todo == "REVIEW"
-    assert "REVIEW REVIEW" not in f.read_text()
+    assert "REVIEW REVIEW" not in f.read_text(encoding="utf-8")
