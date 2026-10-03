@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from org_workspace import _fs
 from org_workspace._vendor.orgparse.lines import TextLine
 
 if TYPE_CHECKING:
@@ -179,6 +180,6 @@ class SessionLog:
             node_part = f" (node:{entry['node_id']})" if entry.get("node_id") else ""
             lines.append(f"  - {ts}{agent_part}{node_part} {entry['message']}")
 
-        path.write_text("\n".join(lines) + "\n")
+        _fs.write_text(path, "\n".join(lines) + "\n")
         self._entries.clear()
         return path

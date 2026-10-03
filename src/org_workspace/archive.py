@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from org_workspace import _fs
 from org_workspace.node_view import StaleNodeError
 from org_workspace.query import _to_date
 
@@ -245,5 +246,5 @@ def _ensure_archive_file(workspace: "OrgWorkspace", path: Path) -> None:
     path = Path(path).resolve()
     if path not in workspace.files():
         if not path.exists():
-            path.write_text("")
+            _fs.write_text(path, "")
         workspace.load(path)

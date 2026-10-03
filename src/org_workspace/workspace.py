@@ -11,6 +11,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator
 
+from org_workspace import _fs
 from org_workspace._compat import dumps, get_multiline_property, set_multiline_property
 from org_workspace._types import StateConfig
 from org_workspace._vendor.orgparse import dumps as _orgparse_dumps
@@ -808,9 +809,11 @@ class OrgWorkspace:
         in other code paths. With this guard, the worst case becomes a
         loud error, not silent data loss.
         """
+        newline = "\n"
         if path.exists():
+            newline = _fs.detect_newline(path)
             try:
-                old_content = path.read_text()
+                old_content = path.read_text(encoding=_fs.ENCODING)
                 old_lines = old_content.count("\n")
             except (OSError, UnicodeDecodeError):
                 old_lines = 0
@@ -835,13 +838,14 @@ class OrgWorkspace:
                         f"This usually means a parser/serializer bug. The "
                         f"existing on-disk file has been left untouched."
                     )
-        # Atomic write: write to .tmp in same directory, fsync, rename.
-        # Same-directory rename is atomic on POSIX; protects against
-        # crashes mid-write leaving a half-truncated file.
+        # Atomic write: write to .tmp in same directory, then replace.
+        # Same-directory replace is atomic on POSIX and NTFS; protects
+        # against crashes mid-write leaving a half-truncated file. UTF-8,
+        # and the file's existing line ending (no CRLF translation).
         tmp = path.with_name(path.name + ".tmp." + str(os.getpid()))
         try:
-            tmp.write_text(content)
-            os.replace(tmp, path)
+            _fs.write_text(tmp, content, newline=newline)
+            _fs.replace(tmp, path)
         except Exception:
             # Best-effort cleanup of orphan temp file.
             try:

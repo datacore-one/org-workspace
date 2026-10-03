@@ -5,13 +5,24 @@ INV-6: File locks acquired in lexicographic path order to prevent deadlocks.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from org_workspace import _fs
+
+# fcntl is POSIX-only; native Windows has msvcrt instead. Choose by what
+# the interpreter provides, so importing never fails on either platform.
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - exercised on the Windows CI job
+    fcntl = None
+    import msvcrt
+
+_IS_WINDOWS = fcntl is None
 
 if TYPE_CHECKING:
     from org_workspace.node_view import NodeView
@@ -22,8 +33,40 @@ class ConflictError(Exception):
     """Raised when optimistic lock detects file changed since snapshot."""
 
 
+def _open_lock_file(path: Path):
+    """Open the separate ``.lock`` file used as the lock handle.
+
+    POSIX keeps its historical ``"w"`` mode. Windows opens without truncating
+    (``"a+"``): another process may hold a byte-range lock on that file.
+    """
+    if _IS_WINDOWS:
+        return open(path, "a+", encoding=_fs.ENCODING)
+    return open(path, "w", encoding=_fs.ENCODING)
+
+
+def _try_lock(fh) -> None:
+    """Take an exclusive non-blocking lock; raise OSError if it is held."""
+    if _IS_WINDOWS:
+        # msvcrt locks a byte range starting at the current position:
+        # always byte 0, one byte, of the separate .lock file.
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock(fh) -> None:
+    if _IS_WINDOWS:
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 class FileLock:
-    """File-level exclusive lock using fcntl.flock.
+    """File-level exclusive lock on a separate ``<file>.lock`` file.
+
+    POSIX uses ``fcntl.flock``; Windows uses ``msvcrt.locking`` on byte 0.
 
     Usage:
         lock = FileLock(path)
@@ -38,11 +81,11 @@ class FileLock:
 
     def acquire(self, timeout: float = 5.0) -> None:
         """Acquire exclusive lock. Raises TimeoutError if not acquired."""
-        self._fd = open(self._lock_path, "w")
+        self._fd = _open_lock_file(self._lock_path)
         deadline = time.monotonic() + timeout
         while True:
             try:
-                fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _try_lock(self._fd)
                 return
             except (OSError, BlockingIOError):
                 if time.monotonic() >= deadline:
@@ -57,12 +100,16 @@ class FileLock:
     def release(self) -> None:
         """Release the lock."""
         if self._fd is not None:
-            fcntl.flock(self._fd, fcntl.LOCK_UN)
-            self._fd.close()
-            self._fd = None
+            try:
+                _unlock(self._fd)
+            finally:
+                self._fd.close()
+                self._fd = None
             try:
                 self._lock_path.unlink()
             except OSError:
+                # Includes PermissionError on Windows when another process
+                # still has the lock file open; the file is harmless.
                 pass
 
     def __enter__(self):
@@ -125,9 +172,9 @@ class OptimisticLock:
             raise ConflictError(
                 f"File {self._path} was modified since snapshot"
             )
-        self._path.write_text(content)
-        # Update snapshot to reflect new state
-        self._snapshot_hash = hashlib.sha256(content.encode()).hexdigest()
+        _fs.write_text(self._path, content)
+        # Update snapshot to reflect new state (exactly the bytes written)
+        self._snapshot_hash = hashlib.sha256(content.encode(_fs.ENCODING)).hexdigest()
 
 
 class TaskClaim:
