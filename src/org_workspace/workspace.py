@@ -38,27 +38,23 @@ def _dumps_subtree(node: OrgNode) -> str:
     return "\n".join(parts)
 
 
+# A heading as the parser reads it (orgparse RE_NODE_HEADER): stars in column 0,
+# then a space. An indented star is a list bullet; "*text*" is bold markup.
+_HEADING_STARS = re.compile(r"^\*+(?= )")
+
+
 def _adjust_levels(text: str, delta: int) -> str:
     """Adjust heading star levels in org text by delta.
 
     Positive delta adds stars, negative removes. Ensures minimum 1 star.
+    Only headings change; every other line is returned as it was.
     """
     if delta == 0:
         return text
-    lines = text.split("\n")
-    result = []
-    for line in lines:
-        if line.lstrip().startswith("*"):
-            # Count leading stars
-            stripped = line.lstrip()
-            stars = len(stripped) - len(stripped.lstrip("*"))
-            if stars > 0:
-                new_stars = max(1, stars + delta)
-                rest = stripped[stars:]
-                result.append("*" * new_stars + rest)
-                continue
-        result.append(line)
-    return "\n".join(result)
+    return "\n".join(
+        _HEADING_STARS.sub(lambda m: "*" * max(1, len(m.group(0)) + delta), line)
+        for line in text.split("\n")
+    )
 
 
 def _find_subtree_end(file_text: str, node: OrgNode) -> int:
@@ -678,8 +674,12 @@ class OrgWorkspace:
         """Move a node from its current file to another file.
 
         Serializes the full subtree (node + all descendants), adjusts heading
-        levels if target_parent implies a different depth, removes from source,
-        and inserts at the correct position in the target.
+        levels to fit the target, removes from source, and inserts at the
+        correct position in the target.
+
+        With ``target_parent`` the node lands one level below that parent, after
+        its last descendant. Without it the node becomes a top-level heading at
+        the end of the target file, whatever level it had in the source.
         """
         target_file = Path(target_file).resolve()
         if target_file not in self._files:
@@ -695,12 +695,11 @@ class OrgWorkspace:
         if not subtree_text.endswith("\n"):
             subtree_text += "\n"
 
-        # Adjust heading levels if target context differs
+        # Fit the heading levels to the target: one below the parent, or the
+        # file's top level when no parent is named. Appended at its old level,
+        # a deeper node would become a child of whatever heading is last there.
         current_level = raw_node.level
-        if target_parent is not None:
-            desired_level = target_parent.level + 1
-        else:
-            desired_level = current_level  # preserve original level
+        desired_level = target_parent.level + 1 if target_parent is not None else 1
         level_delta = desired_level - current_level
         if level_delta != 0:
             subtree_text = _adjust_levels(subtree_text, level_delta)
