@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.2 (unreleased)
+
+### Changed
+
+- `refile()` without `target_parent` places the node at the top level of the
+  target file, as org-refile does for a file target. It used to keep the level
+  the node had in the source, so a deeper node became a child of whatever
+  heading was last in the target: a task moved out of an inbox section into a
+  flat queue file ended up nested under an unrelated task. With a
+  `target_parent` nothing changes.
+
+### Fixed
+
+- A level change during `refile()` touches headings only. An indented `*` list
+  bullet in the body was rewritten into a heading of its own, and a line
+  starting with bold text gained a star.
+
+---
+
 ## 0.7.1 (unreleased)
 
 ### Fixed
